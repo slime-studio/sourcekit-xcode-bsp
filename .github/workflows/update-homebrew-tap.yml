@@ -29,14 +29,23 @@ jobs:
           sed -i "s|sha256 \".*\"|sha256 \"${sha}\"|" Formula/sourcekit-xcode-bsp.rb
 
       - name: Open PR
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.TAP_GITHUB_TOKEN }}
-          branch: "update/sourcekit-xcode-bsp-${{ github.ref_name }}"
-          commit-message: "Update sourcekit-xcode-bsp to ${{ github.ref_name }}"
-          title: "Update sourcekit-xcode-bsp to ${{ github.ref_name }}"
-          body: |
-            Automated formula update for version `${{ github.ref_name }}`.
+        env:
+          GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          version="${{ github.ref_name }}"
+          branch="update/sourcekit-xcode-bsp-${version}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add Formula/sourcekit-xcode-bsp.rb
+          git commit -m "Update sourcekit-xcode-bsp to ${version}"
+          git push origin "$branch"
+          gh pr create \
+            --repo tideline-studio/homebrew-tap \
+            --title "Update sourcekit-xcode-bsp to ${version}" \
+            --body "Automated formula update for version \`${version}\`.
 
-            - URL: `https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz`
-            - SHA-256: `${{ steps.sha.outputs.value }}`
+          - URL: \`https://github.com/${{ github.repository }}/archive/refs/tags/${version}.tar.gz\`
+          - SHA-256: \`${{ steps.sha.outputs.value }}\`" \
+            --base main \
+            --head "$branch"
