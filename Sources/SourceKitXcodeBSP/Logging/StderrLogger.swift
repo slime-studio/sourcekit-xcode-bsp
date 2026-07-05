@@ -25,7 +25,7 @@ public struct StderrLogger: Sendable {
     private func write(level: String, _ message: String) {
         // One write per line keeps lines from interleaving under concurrency, since a
         // single small write to a pipe is delivered atomically (<= PIPE_BUF).
-        let line = "[xcode-bsp:\(category)] \(level): \(message)\n"
+        let line = "[sourcekit-xcode-bsp:\(category)] \(level): \(message)\n"
         FileHandle.standardError.write(Data(line.utf8))
     }
 }

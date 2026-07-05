@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import XcodeBSP
+@testable import SourceKitXcodeBSP
 
 @Suite("XcodePaths Tests")
 struct XcodePathsTests {

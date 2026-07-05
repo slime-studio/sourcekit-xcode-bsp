@@ -3,18 +3,18 @@
 import PackageDescription
 
 let package = Package(
-    name: "swift-xcode-bsp",
+    name: "sourcekit-xcode-bsp",
     platforms: [
         .macOS(.v15),
     ],
     products: [
         .executable(
-            name: "xcode-bsp",
-            targets: ["xcode-bsp"]
+            name: "sourcekit-xcode-bsp",
+            targets: ["sourcekit-xcode-bsp"]
         ),
         .library(
-            name: "XcodeBSP",
-            targets: ["XcodeBSP"]
+            name: "SourceKitXcodeBSP",
+            targets: ["SourceKitXcodeBSP"]
         ),
     ],
     dependencies: [
@@ -25,9 +25,9 @@ let package = Package(
     targets: [
         // Main executable
         .executableTarget(
-            name: "xcode-bsp",
+            name: "sourcekit-xcode-bsp",
             dependencies: [
-                "XcodeBSP",
+                "SourceKitXcodeBSP",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "SwiftBuild", package: "swift-build"),
                 .product(name: "SWBBuildServiceBundle", package: "swift-build"), // must be co-located for out-of-process launch
@@ -39,7 +39,7 @@ let package = Package(
 
         // Core library - testable BSP server implementation
         .target(
-            name: "XcodeBSP",
+            name: "SourceKitXcodeBSP",
             dependencies: [
                 .product(name: "SwiftBuild", package: "swift-build"),
                 .product(name: "BuildServerProtocol", package: "swift-tools-protocols"),
@@ -59,8 +59,8 @@ let package = Package(
 
         // Tests
         .testTarget(
-            name: "XcodeBSPTests",
-            dependencies: ["XcodeBSP"]
+            name: "SourceKitXcodeBSPTests",
+            dependencies: ["SourceKitXcodeBSP"]
         ),
     ]
 )

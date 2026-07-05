@@ -3,14 +3,13 @@ import BuildServerProtocol
 import Foundation
 import LanguageServerProtocol
 import LanguageServerProtocolTransport
+import SourceKitXcodeBSP
 import SwiftBuild
-import XcodeBSP
 
 @main
-struct XcodeBSPCommand: AsyncParsableCommand {
+struct SourcekitXcodeBspCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "xcode-bsp",
-        abstract: "A Build Server Protocol server for Xcode projects",
+        abstract: "A Build Server Protocol server for Xcode projects, for usage with SourceKit-LSP.",
         version: "0.1.0",
         subcommands: [Serve.self, InitCommand.self],
         // The LSP client launches the bare binary (no subcommand) per buildServer.json's
@@ -40,7 +39,7 @@ struct Serve: AsyncParsableCommand {
 
         // Create JSON-RPC connection
         let connection = JSONRPCConnection(
-            name: "xcode-bsp",
+            name: "sourcekit-xcode-bsp",
             protocol: MessageRegistry.bspProtocol,
             receiveFD: .standardInput,
             sendFD: .standardOutput

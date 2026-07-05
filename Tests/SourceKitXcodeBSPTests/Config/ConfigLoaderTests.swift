@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import XcodeBSP
+@testable import SourceKitXcodeBSP
 
 @Suite("ConfigLoader.renderConfig")
 struct RenderConfigTests {
@@ -12,13 +12,13 @@ struct RenderConfigTests {
 
     @Test("Includes BSP discovery fields and the workspace")
     func includesCoreFields() throws {
-        let json = try ConfigLoader.renderConfig(argv: ["/bin/xcode-bsp"], workspace: "App.xcodeproj")
+        let json = try ConfigLoader.renderConfig(argv: ["/bin/sourcekit-xcode-bsp"], workspace: "App.xcodeproj")
         let dict = try parse(json)
 
-        #expect(dict["name"] as? String == "xcode-bsp")
+        #expect(dict["name"] as? String == "sourcekit-xcode-bsp")
         #expect(dict["bspVersion"] as? String == "2.1.0")
         #expect(dict["languages"] as? [String] == ["swift"])
-        #expect(dict["argv"] as? [String] == ["/bin/xcode-bsp"])
+        #expect(dict["argv"] as? [String] == ["/bin/sourcekit-xcode-bsp"])
         #expect(dict["workspace"] as? String == "App.xcodeproj")
     }
 
@@ -51,10 +51,10 @@ struct RenderConfigTests {
     @Test("Does not escape slashes in paths")
     func doesNotEscapeSlashes() throws {
         let json = try ConfigLoader.renderConfig(
-            argv: ["/usr/local/bin/xcode-bsp"],
+            argv: ["/usr/local/bin/sourcekit-xcode-bsp"],
             workspace: "A.xcodeproj"
         )
-        #expect(json.contains("/usr/local/bin/xcode-bsp"))
+        #expect(json.contains("/usr/local/bin/sourcekit-xcode-bsp"))
         #expect(!json.contains("\\/"))
     }
 

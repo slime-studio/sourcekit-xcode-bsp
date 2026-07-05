@@ -102,7 +102,7 @@ public struct BuildServerBootstrap: Sendable {
         serviceProvider: any BuildServiceProviding
     ) async throws -> any BuildServiceSessionProviding {
         let (sessionResult, diagnostics) = await serviceProvider.createSession(
-            name: "xcode-bsp",
+            name: "sourcekit-xcode-bsp",
             cachePath: nil,
             inferiorProductsPath: nil,
             environment: nil

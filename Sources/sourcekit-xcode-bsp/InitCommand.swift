@@ -1,6 +1,6 @@
 import ArgumentParser
 import Foundation
-import XcodeBSP
+import SourceKitXcodeBSP
 
 /// Interactively generates a `buildServer.json` in the current directory.
 struct InitCommand: ParsableCommand {
@@ -37,7 +37,7 @@ struct InitCommand: ParsableCommand {
         let indexing = askYesNo("Enable indexing?", default: true)
 
         // Point argv at the binary running this command so the client launches the same one.
-        let binary = Bundle.main.executablePath ?? CommandLine.arguments.first ?? "xcode-bsp"
+        let binary = Bundle.main.executablePath ?? CommandLine.arguments.first ?? "sourcekit-xcode-bsp"
 
         let json = try ConfigLoader.renderConfig(
             argv: [binary],

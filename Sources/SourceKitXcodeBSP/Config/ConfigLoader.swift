@@ -20,7 +20,7 @@ public struct BuildServerConfig: Sendable, Codable {
 
     /// Optional path to the `SWBBuildServiceBundle` executable (absolute, or relative to
     /// buildServer.json; `~` is expanded). If not specified, the co-located service built
-    /// alongside `xcode-bsp` is used.
+    /// alongside `sourcekit-xcode-bsp` is used.
     public let serviceBundlePath: String?
 
     public init(
@@ -121,13 +121,13 @@ public enum ConfigLoader {
         }
     }
 
-    /// Renders a `buildServer.json` document (BSP discovery fields + xcode-bsp config).
+    /// Renders a `buildServer.json` document (BSP discovery fields + sourcekit-xcode-bsp config).
     ///
     /// Optional values that are `nil` are omitted from the output. Slashes in paths are
     /// not escaped, and keys are sorted for deterministic output.
     ///
     /// - Parameters:
-    ///   - argv: Command the LSP client runs to launch the server (the xcode-bsp binary path).
+    ///   - argv: Command the LSP client runs to launch the server (the sourcekit-xcode-bsp binary path).
     ///   - workspace: Path to `.xcodeproj`/`.xcworkspace` (absolute or relative to the file).
     ///   - platform: Optional run-destination platform (e.g. `iphonesimulator`).
     ///   - buildRoot: Optional build root; when nil the server defaults to `.build/derived-data`.
@@ -138,7 +138,7 @@ public enum ConfigLoader {
         platform: String? = nil,
         buildRoot: String? = nil,
         indexingEnabled: Bool? = nil,
-        name: String = "xcode-bsp",
+        name: String = "sourcekit-xcode-bsp",
         version: String = "0.1.0",
         bspVersion: String = "2.1.0",
         languages: [String] = ["swift"]
