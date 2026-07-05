@@ -6,7 +6,7 @@
 > sourcekit-xcode-bsp is designed for **native Xcode projects**. It is not a Bazel integration. For Bazel-based projects, see [sourcekit-bazel-bsp](https://github.com/spotify/sourcekit-bazel-bsp) by Spotify.
 
 > [!NOTE]
-> This project is early-stage (v0.1.0). APIs and setup flows may change.
+> This project is early-stage (v0.0.1). APIs and setup flows may change.
 
 ## Features
 
@@ -25,15 +25,23 @@ You still need Xcode installed for Apple platform SDKs and build tooling, even w
 
 ## Quick start
 
-### 1. Build the tool
+### 1. Install
+
+**Homebrew** (recommended):
+
+```bash
+brew tap tideline-studio/tap
+brew install sourcekit-xcode-bsp
+```
+
+**Build from source** (requires Swift 6.2.3+):
 
 ```bash
 git clone https://github.com/tideline-studio/sourcekit-xcode-bsp.git
 cd sourcekit-xcode-bsp
 swift build -c release
+cp .build/release/sourcekit-xcode-bsp /usr/local/bin/
 ```
-
-The binary is at `.build/release/sourcekit-xcode-bsp`.
 
 ### 2. Generate `buildServer.json`
 
