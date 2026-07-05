@@ -1,0 +1,42 @@
+name: Update Homebrew Tap
+
+on:
+  push:
+    tags:
+      - '[0-9]*.[0-9]*.[0-9]*'
+
+jobs:
+  update-tap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute SHA256
+        id: sha
+        run: |
+          sha=$(curl -sL "https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz" | shasum -a 256 | awk '{print $1}')
+          echo "value=$sha" >> $GITHUB_OUTPUT
+
+      - name: Checkout tap
+        uses: actions/checkout@v4
+        with:
+          repository: tideline-studio/homebrew-tap
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+
+      - name: Update formula
+        run: |
+          version="${{ github.ref_name }}"
+          sha="${{ steps.sha.outputs.value }}"
+          sed -i "s|url \".*\"|url \"https://github.com/${{ github.repository }}/archive/refs/tags/${version}.tar.gz\"|" Formula/sourcekit-xcode-bsp.rb
+          sed -i "s|sha256 \".*\"|sha256 \"${sha}\"|" Formula/sourcekit-xcode-bsp.rb
+
+      - name: Open PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          branch: "update/sourcekit-xcode-bsp-${{ github.ref_name }}"
+          commit-message: "Update sourcekit-xcode-bsp to ${{ github.ref_name }}"
+          title: "Update sourcekit-xcode-bsp to ${{ github.ref_name }}"
+          body: |
+            Automated formula update for version `${{ github.ref_name }}`.
+
+            - URL: `https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz`
+            - SHA-256: `${{ steps.sha.outputs.value }}`
