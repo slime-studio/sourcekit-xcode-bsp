@@ -2,7 +2,7 @@ import BuildServerProtocol
 import Foundation
 import LanguageServerProtocol
 import LanguageServerProtocolTransport
-import os // for OSAllocatedUnfairLock; logging uses StderrLogger
+import os
 import SwiftBuild
 
 /// Error types for bootstrap failures.
@@ -68,21 +68,7 @@ public struct BuildServerBootstrap: Sendable {
                 workspacePath: workspacePath
             )
 
-            // Pre-generate the build description before the server starts.
-            //
-            // SWBBuildServer.initialize() enqueues scheduleRegeneratingBuildDescription()
-            // asynchronously after responding to build/initialize. sourcekit-lsp then
-            // fires workspace/buildTargets immediately — before the async generation
-            // finishes — and gets "No build description" every time.
-            //
-            // Generating the description here warms the SwiftBuild disk cache.
-            // SWBBuildServer.scheduleRegeneratingBuildDescription then becomes a
-            // near-instant cache hit and buildDescriptionID is set before the LSP
-            // can race to workspace/buildTargets.
-            try await prewarmBuildDescription(session: session, buildRequest: buildRequest)
-
-            // Start server and wait for exit. The server loads the workspace
-            // internally when build/initialize arrives (containerPath pifSource).
+            // Start server and wait for exit.
             try await runServer(
                 session: session,
                 buildRequest: buildRequest,
@@ -168,56 +154,6 @@ public struct BuildServerBootstrap: Sendable {
         logger.info("Adding \(targets.count) configured targets")
         for target in targets {
             buildRequest.add(target: SWBConfiguredTarget(guid: target.guid))
-        }
-    }
-
-    /// Pre-generates the build description so the SwiftBuild cache is warm before
-    /// `SWBBuildServer` starts. This mirrors the preparation request that
-    /// `SWBBuildServer.preparationRequest(for:)` produces so the cached result is
-    /// reused when `scheduleRegeneratingBuildDescription` fires after
-    /// `build/initialize`.
-    private func prewarmBuildDescription(
-        session: any BuildServiceSessionProviding,
-        buildRequest: SWBBuildRequest
-    ) async throws {
-        guard let realSession = session as? RealBuildServiceSession else {
-            // Test doubles skip the prewarm.
-            return
-        }
-
-        logger.info("Pre-warming build description...")
-
-        // Mirror the preparation request shape that SWBBuildServer builds internally.
-        var prepRequest = buildRequest
-        prepRequest.buildCommand = .prepareForIndexing(
-            buildOnlyTheseTargets: nil,
-            enableIndexBuildArena: true
-        )
-        prepRequest.enableIndexBuildArena = true
-        prepRequest.continueBuildingAfterErrors = true
-        prepRequest.parameters.action = "indexbuild"
-        var overrides = buildRequest.parameters.overrides.commandLine ?? SWBSettingsTable()
-        overrides.set(value: "YES", for: "ONLY_ACTIVE_ARCH")
-        overrides.set(value: "NO", for: "INDEX_ENABLE_OPTIMIZATION_LEVEL_OVERRIDE")
-        prepRequest.parameters.overrides.commandLine = overrides
-        for i in prepRequest.configuredTargets.indices {
-            prepRequest.configuredTargets[i].parameters?.action = "indexbuild"
-            var t = prepRequest.configuredTargets[i].parameters?.overrides.commandLine ?? SWBSettingsTable()
-            t.set(value: "YES", for: "ONLY_ACTIVE_ARCH")
-            t.set(value: "NO", for: "INDEX_ENABLE_OPTIMIZATION_LEVEL_OVERRIDE")
-            prepRequest.configuredTargets[i].parameters?.overrides.commandLine = t
-        }
-
-        try await realSession.session.setSystemInfo(.default())
-
-        let op = try await realSession.session.createBuildOperationForBuildDescriptionOnly(
-            request: prepRequest,
-            delegate: NoopPlanningDelegate()
-        )
-        for try await event in try await op.start() {
-            if case .reportBuildDescription(_) = event {
-                logger.info("Build description ready")
-            }
         }
     }
 
@@ -346,20 +282,3 @@ public extension BuildServerBootstrap {
     }
 }
 
-/// No-op delegate used during build description prewarm.
-private final class NoopPlanningDelegate: SWBPlanningOperationDelegate, Sendable {
-    func provisioningTaskInputs(
-        targetGUID: String,
-        provisioningSourceData: SWBProvisioningTaskInputsSourceData
-    ) async -> SWBProvisioningTaskInputs {
-        SWBProvisioningTaskInputs()
-    }
-
-    func executeExternalTool(
-        commandLine: [String],
-        workingDirectory: String?,
-        environment: [String: String]
-    ) async throws -> SWBExternalToolResult {
-        .deferred
-    }
-}
