@@ -19,7 +19,7 @@
 
 - **macOS 15+**
 - **Xcode 26+** installed and selected via `xcode-select` (platform SDKs and toolchains come from Xcode)
-- **Swift 6.2+** to build from source (see `.swift-version`)
+- **Swift 6.2+** to build from source
 
 You still need Xcode installed for Apple platform SDKs and build tooling, even when developing in another editor.
 
