@@ -1,5 +1,6 @@
 import ArgumentParser
 import BuildServerProtocol
+import Darwin
 import Foundation
 import LanguageServerProtocol
 import LanguageServerProtocolTransport
@@ -26,6 +27,10 @@ struct Serve: AsyncParsableCommand {
     )
 
     func run() async throws {
+        // BSP servers communicate over pipes; a broken pipe during shutdown should
+        // not crash the process. Ignore SIGPIPE so writes return EPIPE instead.
+        signal(SIGPIPE, SIG_IGN)
+
         // Load configuration
         let cwd = FileManager.default.currentDirectoryPath
         let config = try ConfigLoader.load(from: cwd)
