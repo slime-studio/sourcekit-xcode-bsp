@@ -18,8 +18,8 @@
 ## Requirements
 
 - **macOS 15+**
-- **Xcode 16+** installed and selected via `xcode-select` (platform SDKs and toolchains come from Xcode)
-- **Swift 6.2.3+** to build from source (see `.swift-version`)
+- **Xcode 26+** installed and selected via `xcode-select` (platform SDKs and toolchains come from Xcode)
+- **Swift 6.2+** to build from source
 
 You still need Xcode installed for Apple platform SDKs and build tooling, even when developing in another editor.
 
@@ -34,7 +34,7 @@ brew tap tideline-studio/tap
 brew install sourcekit-xcode-bsp
 ```
 
-**Build from source** (requires Swift 6.2.3+):
+**Build from source** (requires Swift 6.2+):
 
 ```bash
 git clone https://github.com/tideline-studio/sourcekit-xcode-bsp.git
@@ -133,7 +133,7 @@ In Cursor / VSCode, open the **Output** panel and select **SourceKit Language Se
 
 - **`buildServer.json` not found** — the file must live in the workspace root that your editor opens.
 - **Workspace not found** — confirm the `workspace` path in `buildServer.json` points to a valid `.xcodeproj` or `.xcworkspace`.
-- **Xcode not found** — run `xcode-select -p` and ensure Xcode 16+ is installed. You can override with `DEVELOPER_DIR`.
+- **Xcode not found** — run `xcode-select -p` and ensure Xcode 26+ is installed. You can override with `DEVELOPER_DIR`.
 
 ## Related projects
 
