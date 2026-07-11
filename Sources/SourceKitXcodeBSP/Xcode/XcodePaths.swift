@@ -154,9 +154,9 @@ public struct XcodeVersion: Sendable, CustomStringConvertible {
     public let minor: Int
     public let patch: Int
 
-    /// Whether this Xcode version is supported (≥16.0).
+    /// Whether this Xcode version is supported (≥26.0).
     public var isSupported: Bool {
-        major >= 16
+        major >= 26
     }
 
     public var description: String {
@@ -206,7 +206,7 @@ extension XcodePathError: LocalizedError {
         case .versionNotFound:
             "Could not determine Xcode version"
         case let .unsupportedVersion(version):
-            "Xcode \(version) is not supported. Requires Xcode 16.0 or later."
+            "Xcode \(version) is not supported. Requires Xcode 26 or later."
         case .swbBuildServiceNotFound:
             "SWBBuildService not found in Xcode.app. This may indicate a corrupted Xcode installation."
         }

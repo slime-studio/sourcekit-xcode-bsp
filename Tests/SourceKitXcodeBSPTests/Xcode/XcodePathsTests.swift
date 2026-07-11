@@ -43,24 +43,24 @@ struct XcodePathsTests {
         #expect(version.patch == 0)
     }
 
-    @Test("XcodeVersion isSupported for Xcode 16+")
-    func versionIsSupportedXcode16() {
-        let v16 = XcodeVersion(major: 16, minor: 0)
-        let v16_2 = XcodeVersion(major: 16, minor: 2)
-        let v17 = XcodeVersion(major: 17, minor: 0)
+    @Test("XcodeVersion isSupported for Xcode 26+")
+    func versionIsSupportedXcode26() {
+        let v26 = XcodeVersion(major: 26, minor: 0)
+        let v26_2 = XcodeVersion(major: 26, minor: 2)
+        let v27 = XcodeVersion(major: 27, minor: 0)
 
-        #expect(v16.isSupported)
-        #expect(v16_2.isSupported)
-        #expect(v17.isSupported)
+        #expect(v26.isSupported)
+        #expect(v26_2.isSupported)
+        #expect(v27.isSupported)
     }
 
-    @Test("XcodeVersion isSupported false for Xcode 15")
-    func versionNotSupportedXcode15() {
-        let v15 = XcodeVersion(major: 15, minor: 4)
-        let v14 = XcodeVersion(major: 14, minor: 0)
+    @Test("XcodeVersion isSupported false for Xcode 25")
+    func versionNotSupportedXcode25() {
+        let v25 = XcodeVersion(major: 25, minor: 4)
+        let v16 = XcodeVersion(major: 16, minor: 0)
 
-        #expect(!v15.isSupported)
-        #expect(!v14.isSupported)
+        #expect(!v25.isSupported)
+        #expect(!v16.isSupported)
     }
 
     @Test("XcodeVersion description formats correctly")
@@ -94,9 +94,9 @@ struct XcodePathsTests {
 
     @Test("Unsupported version error includes version number")
     func unsupportedVersionErrorIncludesVersion() {
-        let error = XcodePathError.unsupportedVersion(XcodeVersion(major: 15, minor: 4))
+        let error = XcodePathError.unsupportedVersion(XcodeVersion(major: 25, minor: 4))
 
-        #expect(error.errorDescription?.contains("15.4") == true)
-        #expect(error.errorDescription?.contains("16.0") == true)
+        #expect(error.errorDescription?.contains("25.4") == true)
+        #expect(error.errorDescription?.contains("26") == true)
     }
 }
