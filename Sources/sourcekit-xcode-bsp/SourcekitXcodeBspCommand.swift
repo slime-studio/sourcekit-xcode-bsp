@@ -42,7 +42,7 @@ struct Serve: AsyncParsableCommand {
         let serviceBundlePath = ConfigLoader.resolveServiceBundlePath(config: config, relativeTo: cwd)
         let serviceProvider = try await RealBuildServiceProvider.makeDefault(
             serviceBundlePath: serviceBundlePath,
-            synchronousBuildDescriptionSerialization: config.synchronousBuildDescriptionSerialization ?? false
+            synchronousBuildDescriptionSerialization: config.synchronousBuildDescriptionSerialization ?? true
         )
 
         // Create JSON-RPC connection

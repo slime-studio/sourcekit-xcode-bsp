@@ -69,7 +69,7 @@ public struct RealBuildServiceProvider: BuildServiceProviding {
     ///   Package.swift dependency).
     public static func makeDefault(
         serviceBundlePath: String? = nil,
-        synchronousBuildDescriptionSerialization: Bool = false
+        synchronousBuildDescriptionSerialization: Bool = true
     ) async throws -> RealBuildServiceProvider {
         if synchronousBuildDescriptionSerialization {
             setenv("UseSynchronousBuildDescriptionSerialization", "YES", 1)

@@ -36,7 +36,7 @@ struct InitCommand: ParsableCommand {
         let buildRoot = ask("Build root", default: ".build/derived-data")
         let syncSerialization = askYesNo(
             "Synchronous build description serialization? (fixes race window on slow projects)",
-            default: false
+            default: true
         )
 
         // Point argv at the binary running this command so the client launches the same one.
@@ -47,7 +47,7 @@ struct InitCommand: ParsableCommand {
             workspace: workspace,
             platform: platform.isEmpty ? nil : platform,
             buildRoot: buildRoot.isEmpty ? nil : buildRoot,
-            synchronousBuildDescriptionSerialization: syncSerialization ? true : nil
+            synchronousBuildDescriptionSerialization: syncSerialization ? nil : false
         )
 
         try (json + "\n").write(toFile: outPath, atomically: true, encoding: .utf8)
