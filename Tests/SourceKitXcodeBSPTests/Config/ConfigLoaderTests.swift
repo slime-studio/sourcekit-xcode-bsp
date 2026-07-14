@@ -70,8 +70,21 @@ struct RenderConfigTests {
         #expect(config.buildRoot == "build")
     }
 
-    @Test("Ignores legacy indexingEnabled key when decoding")
-    func ignoresLegacyIndexingEnabled() throws {
+    @Test("Does not emit indexingEnabled")
+    func doesNotEmitIndexingEnabled() throws {
+        let json = try ConfigLoader.renderConfig(
+            argv: ["x"],
+            workspace: "A.xcodeproj",
+            platform: "iphonesimulator",
+            buildRoot: ".build/derived-data"
+        )
+        let dict = try parse(json)
+        #expect(dict["indexingEnabled"] == nil)
+    }
+
+    @Test("Decodes configs that still contain legacy indexingEnabled")
+    func decodesLegacyIndexingEnabled() throws {
+        // Pre-removal configs may still set this key; unknown keys must not fail decode.
         let json = """
         {
           "workspace": "A.xcodeproj",

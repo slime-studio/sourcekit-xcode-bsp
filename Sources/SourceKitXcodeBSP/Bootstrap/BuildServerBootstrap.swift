@@ -120,11 +120,7 @@ public struct BuildServerBootstrap: Sendable {
 
     private func makeBuildRequest(buildRoot: String, platform: String?) -> SWBBuildRequest {
         var buildRequest = SWBBuildRequest()
-        // Always enable the index data store on the SwiftBuild arena. A former
-        // `indexingEnabled` buildServer.json knob mapped here, but in the BSP +
-        // sourcekit-lsp path its effect is unclear (it does not gate LSP
-        // background indexing), so the option was removed rather than expose a
-        // misleading toggle.
+        // INDEX_ENABLE_DATA_STORE is always on; not exposed as config (unclear BSP semantics).
         buildRequest.parameters.arenaInfo = SWBArenaInfo(
             derivedDataPath: buildRoot,
             buildProductsPath: (buildRoot as NSString).appendingPathComponent("Products"),
