@@ -67,7 +67,13 @@ public struct RealBuildServiceProvider: BuildServiceProviding {
     ///   `buildServer.json` (`serviceBundlePath`). When `nil`, falls back to the
     ///   `SWBBuildServiceBundle` co-located next to this executable (guaranteed by the
     ///   Package.swift dependency).
-    public static func makeDefault(serviceBundlePath: String? = nil) async throws -> RealBuildServiceProvider {
+    public static func makeDefault(
+        serviceBundlePath: String? = nil,
+        synchronousBuildDescriptionSerialization: Bool = false
+    ) async throws -> RealBuildServiceProvider {
+        if synchronousBuildDescriptionSerialization {
+            setenv("UseSynchronousBuildDescriptionSerialization", "YES", 1)
+        }
         if let serviceBundlePath {
             // An explicit path from the config is authoritative.
             setenv("SWBBUILDSERVICE_PATH", serviceBundlePath, 1)

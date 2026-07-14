@@ -34,6 +34,10 @@ struct InitCommand: ParsableCommand {
             default: "iphonesimulator"
         )
         let buildRoot = ask("Build root", default: ".build/derived-data")
+        let syncSerialization = askYesNo(
+            "Synchronous build description serialization? (fixes race window on slow projects)",
+            default: false
+        )
 
         // Point argv at the binary running this command so the client launches the same one.
         let binary = Bundle.main.executablePath ?? CommandLine.arguments.first ?? "sourcekit-xcode-bsp"
@@ -42,7 +46,8 @@ struct InitCommand: ParsableCommand {
             argv: [binary],
             workspace: workspace,
             platform: platform.isEmpty ? nil : platform,
-            buildRoot: buildRoot.isEmpty ? nil : buildRoot
+            buildRoot: buildRoot.isEmpty ? nil : buildRoot,
+            synchronousBuildDescriptionSerialization: syncSerialization ? true : nil
         )
 
         try (json + "\n").write(toFile: outPath, atomically: true, encoding: .utf8)

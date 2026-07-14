@@ -29,6 +29,7 @@ struct RenderConfigTests {
 
         #expect(dict["platform"] == nil)
         #expect(dict["buildRoot"] == nil)
+        #expect(dict["synchronousBuildDescriptionSerialization"] == nil)
     }
 
     @Test("Emits optional fields with camelCase keys when provided")
@@ -37,12 +38,26 @@ struct RenderConfigTests {
             argv: ["x"],
             workspace: "A.xcodeproj",
             platform: "iphonesimulator",
-            buildRoot: ".build/derived-data"
+            buildRoot: ".build/derived-data",
+            synchronousBuildDescriptionSerialization: true
         )
         let dict = try parse(json)
 
         #expect(dict["platform"] as? String == "iphonesimulator")
         #expect(dict["buildRoot"] as? String == ".build/derived-data")
+        #expect(dict["synchronousBuildDescriptionSerialization"] as? Bool == true)
+    }
+
+    @Test("Emits false when synchronousBuildDescriptionSerialization is explicitly disabled")
+    func emitsFalseWhenSyncSerializationDisabled() throws {
+        let json = try ConfigLoader.renderConfig(
+            argv: ["x"],
+            workspace: "A.xcodeproj",
+            synchronousBuildDescriptionSerialization: false
+        )
+        let dict = try parse(json)
+
+        #expect(dict["synchronousBuildDescriptionSerialization"] as? Bool == false)
     }
 
     @Test("Does not escape slashes in paths")
@@ -61,13 +76,15 @@ struct RenderConfigTests {
             argv: ["x"],
             workspace: "A.xcodeproj",
             platform: "macosx",
-            buildRoot: "build"
+            buildRoot: "build",
+            synchronousBuildDescriptionSerialization: true
         )
         let config = try JSONDecoder().decode(BuildServerConfig.self, from: Data(json.utf8))
 
         #expect(config.workspace == "A.xcodeproj")
         #expect(config.platform == "macosx")
         #expect(config.buildRoot == "build")
+        #expect(config.synchronousBuildDescriptionSerialization == true)
     }
 
     @Test("Does not emit indexingEnabled")
