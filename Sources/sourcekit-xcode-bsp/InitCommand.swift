@@ -34,7 +34,6 @@ struct InitCommand: ParsableCommand {
             default: "iphonesimulator"
         )
         let buildRoot = ask("Build root", default: ".build/derived-data")
-        let indexing = askYesNo("Enable indexing?", default: true)
 
         // Point argv at the binary running this command so the client launches the same one.
         let binary = Bundle.main.executablePath ?? CommandLine.arguments.first ?? "sourcekit-xcode-bsp"
@@ -43,8 +42,7 @@ struct InitCommand: ParsableCommand {
             argv: [binary],
             workspace: workspace,
             platform: platform.isEmpty ? nil : platform,
-            buildRoot: buildRoot.isEmpty ? nil : buildRoot,
-            indexingEnabled: indexing
+            buildRoot: buildRoot.isEmpty ? nil : buildRoot
         )
 
         try (json + "\n").write(toFile: outPath, atomically: true, encoding: .utf8)

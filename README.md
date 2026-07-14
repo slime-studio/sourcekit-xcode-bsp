@@ -85,7 +85,6 @@ sourcekit-lsp discovers `buildServer.json` automatically and launches `sourcekit
 | `workspace` | Yes | Path to `.xcodeproj` or `.xcworkspace` (relative to `buildServer.json` or absolute) |
 | `buildRoot` | No | Build artifacts directory. Defaults to `.build/derived-data` |
 | `platform` | No | Target platform, e.g. `iphonesimulator`, `iphoneos`, `macosx`. If omitted, swift-build chooses a default |
-| `indexingEnabled` | No | Enable index store. Defaults to `true` |
 | `serviceBundlePath` | No | Path to `SWBBuildServiceBundle`. If omitted, uses the service bundled alongside the binary |
 
 ### CLI reference

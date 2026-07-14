@@ -29,7 +29,6 @@ struct RenderConfigTests {
 
         #expect(dict["platform"] == nil)
         #expect(dict["buildRoot"] == nil)
-        #expect(dict["indexingEnabled"] == nil)
     }
 
     @Test("Emits optional fields with camelCase keys when provided")
@@ -38,14 +37,12 @@ struct RenderConfigTests {
             argv: ["x"],
             workspace: "A.xcodeproj",
             platform: "iphonesimulator",
-            buildRoot: ".build/derived-data",
-            indexingEnabled: false
+            buildRoot: ".build/derived-data"
         )
         let dict = try parse(json)
 
         #expect(dict["platform"] as? String == "iphonesimulator")
         #expect(dict["buildRoot"] as? String == ".build/derived-data")
-        #expect(dict["indexingEnabled"] as? Bool == false)
     }
 
     @Test("Does not escape slashes in paths")
@@ -64,14 +61,24 @@ struct RenderConfigTests {
             argv: ["x"],
             workspace: "A.xcodeproj",
             platform: "macosx",
-            buildRoot: "build",
-            indexingEnabled: true
+            buildRoot: "build"
         )
         let config = try JSONDecoder().decode(BuildServerConfig.self, from: Data(json.utf8))
 
         #expect(config.workspace == "A.xcodeproj")
         #expect(config.platform == "macosx")
         #expect(config.buildRoot == "build")
-        #expect(config.indexingEnabled == true)
+    }
+
+    @Test("Ignores legacy indexingEnabled key when decoding")
+    func ignoresLegacyIndexingEnabled() throws {
+        let json = """
+        {
+          "workspace": "A.xcodeproj",
+          "indexingEnabled": false
+        }
+        """
+        let config = try JSONDecoder().decode(BuildServerConfig.self, from: Data(json.utf8))
+        #expect(config.workspace == "A.xcodeproj")
     }
 }
