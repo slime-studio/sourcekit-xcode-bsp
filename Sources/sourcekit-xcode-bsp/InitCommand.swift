@@ -35,7 +35,7 @@ struct InitCommand: ParsableCommand {
         )
         let buildRoot = ask("Build root", default: ".build/derived-data")
         let syncSerialization = askYesNo(
-            "Synchronous build description serialization? (fixes race window on slow projects)",
+            "Avoid empty diagnostics on startup? (writes build description before notifying SourceKit-LSP)",
             default: true
         )
 

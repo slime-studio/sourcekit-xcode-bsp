@@ -86,6 +86,7 @@ sourcekit-lsp discovers `buildServer.json` automatically and launches `sourcekit
 | `buildRoot` | No | Build artifacts directory. Defaults to `.build/derived-data` |
 | `platform` | No | Target platform, e.g. `iphonesimulator`, `iphoneos`, `macosx`. If omitted, swift-build chooses a default |
 | `serviceBundlePath` | No | Path to `SWBBuildServiceBundle`. If omitted, uses the service bundled alongside the binary |
+| `synchronousBuildDescriptionSerialization` | No | Write the build description before notifying SourceKit-LSP, avoiding empty diagnostics on startup. Defaults to `true` |
 
 ### CLI reference
 
