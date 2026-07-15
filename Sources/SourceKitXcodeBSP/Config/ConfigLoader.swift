@@ -15,6 +15,10 @@ public struct BuildServerConfig: Sendable, Codable {
     /// If not specified, SwiftBuild uses priority order (macOS > iPhone Simulator > etc.).
     public let platform: String?
 
+    /// Whether to synchronously serialize generated build descriptions before notifying clients.
+    /// When omitted, the server defaults to true.
+    public let synchronousBuildDescriptionSerialization: Bool?
+
     /// Optional path to the `SWBBuildServiceBundle` executable (absolute, or relative to
     /// buildServer.json; `~` is expanded). If not specified, the co-located service built
     /// alongside `sourcekit-xcode-bsp` is used.
@@ -24,11 +28,13 @@ public struct BuildServerConfig: Sendable, Codable {
         workspace: String,
         buildRoot: String? = nil,
         platform: String? = nil,
+        synchronousBuildDescriptionSerialization: Bool? = nil,
         serviceBundlePath: String? = nil
     ) {
         self.workspace = workspace
         self.buildRoot = buildRoot
         self.platform = platform
+        self.synchronousBuildDescriptionSerialization = synchronousBuildDescriptionSerialization
         self.serviceBundlePath = serviceBundlePath
     }
 }
@@ -126,11 +132,14 @@ public enum ConfigLoader {
     ///   - workspace: Path to `.xcodeproj`/`.xcworkspace` (absolute or relative to the file).
     ///   - platform: Optional run-destination platform (e.g. `iphonesimulator`).
     ///   - buildRoot: Optional build root; when nil the server defaults to `.build/derived-data`.
+    ///   - synchronousBuildDescriptionSerialization: Optional toggle to write build descriptions
+    ///     before SourceKit-LSP receives their target-change notification.
     public static func renderConfig(
         argv: [String],
         workspace: String,
         platform: String? = nil,
         buildRoot: String? = nil,
+        synchronousBuildDescriptionSerialization: Bool? = nil,
         name: String = "sourcekit-xcode-bsp",
         version: String = "0.1.0",
         bspVersion: String = "2.1.0",
@@ -145,11 +154,13 @@ public enum ConfigLoader {
             let workspace: String
             let buildRoot: String?
             let platform: String?
+            let synchronousBuildDescriptionSerialization: Bool?
         }
 
         let doc = Document(
             name: name, version: version, bspVersion: bspVersion, languages: languages,
-            argv: argv, workspace: workspace, buildRoot: buildRoot, platform: platform
+            argv: argv, workspace: workspace, buildRoot: buildRoot, platform: platform,
+            synchronousBuildDescriptionSerialization: synchronousBuildDescriptionSerialization
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]

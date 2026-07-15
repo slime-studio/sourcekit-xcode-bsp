@@ -40,7 +40,10 @@ struct Serve: AsyncParsableCommand {
         // Create service provider. Use the SWBBuildService path from config if set,
         // otherwise fall back to the co-located service.
         let serviceBundlePath = ConfigLoader.resolveServiceBundlePath(config: config, relativeTo: cwd)
-        let serviceProvider = try await RealBuildServiceProvider.makeDefault(serviceBundlePath: serviceBundlePath)
+        let serviceProvider = try await RealBuildServiceProvider.makeDefault(
+            serviceBundlePath: serviceBundlePath,
+            synchronousBuildDescriptionSerialization: config.synchronousBuildDescriptionSerialization ?? true
+        )
 
         // Create JSON-RPC connection
         let connection = JSONRPCConnection(
