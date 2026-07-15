@@ -216,22 +216,41 @@ public struct BuildServerBootstrap: Sendable {
                 }
             )
 
-            // Configure watcher callback now that we have server reference
-            watcher?.setOnChange { [server] in
-                Task {
-                    logger.info("Project changed, reloading workspace...")
-                    connection.send(OnBuildLogMessageNotification(
-                        type: .log,
-                        message: "Reloading workspace...",
-                        structure: .begin(.init(title: "Reloading workspace"))
-                    ))
-                    // Reload workspace on session then notify server to regenerate
-                    // build description (.session pifSource uses sessionPIFURI).
-                    try? await realSession.session.loadWorkspace(containerPath: workspacePath)
+            // Coalesce FSEvents bursts and serialize loadWorkspace + regenerate so
+            // overlapping client/server notifications cannot interleave reloads.
+            let reloadCoordinator = WorkspaceReloadCoordinator { [server] in
+                logger.info("Project changed, reloading workspace...")
+                connection.send(OnBuildLogMessageNotification(
+                    type: .log,
+                    message: "Reloading workspace...",
+                    structure: .begin(.init(title: "Reloading workspace"))
+                ))
+                // Reload workspace on session then notify server to regenerate
+                // build description (.session pifSource uses sessionPIFURI).
+                do {
+                    try await realSession.session.loadWorkspace(containerPath: workspacePath)
                     let notification = OnWatchedFilesDidChangeNotification(
                         changes: [FileEvent(uri: SWBBuildServer.sessionPIFURI, type: .changed)]
                     )
                     await server.handle(notification: notification)
+                    connection.send(OnBuildLogMessageNotification(
+                        type: .log,
+                        message: "Workspace reload complete",
+                        structure: .end(.init())
+                    ))
+                } catch {
+                    logger.error("Workspace reload failed: \(error)")
+                    connection.send(OnBuildLogMessageNotification(
+                        type: .error,
+                        message: "Workspace reload failed: \(error)",
+                        structure: .end(.init())
+                    ))
+                }
+            }
+
+            watcher?.setOnChange {
+                Task {
+                    await reloadCoordinator.requestReload()
                 }
             }
             watcher?.start()
