@@ -54,8 +54,7 @@ public struct BuildServerBootstrap: Sendable {
         do {
             var buildRequest = makeBuildRequest(
                 buildRoot: buildRoot,
-                platform: config.platform,
-                indexingEnabled: config.indexingEnabled ?? true
+                platform: config.platform
             )
 
             // Load workspace and populate configured targets before creating the server.
@@ -119,8 +118,9 @@ public struct BuildServerBootstrap: Sendable {
         }
     }
 
-    private func makeBuildRequest(buildRoot: String, platform: String?, indexingEnabled: Bool) -> SWBBuildRequest {
+    private func makeBuildRequest(buildRoot: String, platform: String?) -> SWBBuildRequest {
         var buildRequest = SWBBuildRequest()
+        // INDEX_ENABLE_DATA_STORE is always on; not exposed as config (unclear BSP semantics).
         buildRequest.parameters.arenaInfo = SWBArenaInfo(
             derivedDataPath: buildRoot,
             buildProductsPath: (buildRoot as NSString).appendingPathComponent("Products"),
@@ -130,7 +130,7 @@ public struct BuildServerBootstrap: Sendable {
             indexRegularBuildIntermediatesPath: buildRoot,
             indexPCHPath: buildRoot,
             indexDataStoreFolderPath: buildRoot,
-            indexEnableDataStore: indexingEnabled
+            indexEnableDataStore: true
         )
 
         if let platform {
