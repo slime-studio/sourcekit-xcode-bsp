@@ -20,11 +20,7 @@ struct WorkspaceChangeFilterTests {
     func acceptsConfiguredXcworkspace() {
         let workspace = "/Projects/App/App.xcworkspace"
         let filter = WorkspaceChangeFilter(
-            allowedPaths: [
-                "/Projects/App/App.xcworkspace/contents.xcworkspacedata",
-                "/Projects/App/Package.swift",
-                "/Projects/App/Package.resolved",
-            ]
+            allowedPaths: WorkspaceChangeFilter.canonicalMetadataPaths(for: workspace)
         )
 
         #expect(
@@ -98,6 +94,27 @@ struct WorkspaceChangeFilterTests {
         #expect(
             !filter.isRelevantChange(
                 path: "/Projects/App/SourcePackages/checkouts/Dep/Package.swift"
+            )
+        )
+    }
+
+    @Test("Does not ignore projects living under a directory named checkouts")
+    func acceptsProjectsUnderCheckoutsDirectory() {
+        // ~/checkouts/MyApp is a common clone layout; bare "checkouts" must not
+        // be an ignore component or reloads never fire.
+        let filter = WorkspaceChangeFilter(
+            allowedPaths: [
+                "/Users/me/checkouts/MyApp/MyApp.xcodeproj/project.pbxproj",
+            ]
+        )
+        #expect(
+            filter.isRelevantChange(
+                path: "/Users/me/checkouts/MyApp/MyApp.xcodeproj/project.pbxproj"
+            )
+        )
+        #expect(
+            !WorkspaceChangeFilter.isIgnored(
+                path: "/Users/me/checkouts/MyApp/MyApp.xcodeproj/project.pbxproj"
             )
         )
     }

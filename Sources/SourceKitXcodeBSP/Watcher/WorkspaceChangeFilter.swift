@@ -14,8 +14,8 @@ public struct WorkspaceChangeFilter: Sendable {
         ".build",
         ".swiftpm",
         "DerivedData",
+        // Covers SourcePackages/checkouts without matching clone dirs like ~/checkouts/App.
         "SourcePackages",
-        "checkouts",
         "xcuserdata",
         "Index.noindex",
         "ModuleCache.noindex",
@@ -39,6 +39,10 @@ public struct WorkspaceChangeFilter: Sendable {
     /// files. Sibling `.xcodeproj` / `.xcworkspace` metadata at the same parent level
     /// is included so multi-project roots still reload without matching nested
     /// package checkouts.
+    ///
+    /// - Note: Sibling discovery is a one-shot snapshot of the parent directory at
+    ///   call time (watcher init). Projects created later as siblings are not added
+    ///   to the allowlist until the server restarts and rebuilds the filter.
     public static func canonicalMetadataPaths(for workspacePath: String) -> Set<String> {
         let workspaceURL = URL(fileURLWithPath: workspacePath).standardizedFileURL
         let parent = workspaceURL.deletingLastPathComponent()

@@ -227,6 +227,9 @@ public struct BuildServerBootstrap: Sendable {
                 ))
                 // Reload workspace on session then notify server to regenerate
                 // build description (.session pifSource uses sessionPIFURI).
+                // handle() only schedules regenerate on SWB's serial queue and
+                // returns; we cannot await that work from here, so a trailing
+                // loadWorkspace may still overlap an in-flight regenerate.
                 do {
                     try await realSession.session.loadWorkspace(containerPath: workspacePath)
                     let notification = OnWatchedFilesDidChangeNotification(
@@ -235,7 +238,7 @@ public struct BuildServerBootstrap: Sendable {
                     await server.handle(notification: notification)
                     connection.send(OnBuildLogMessageNotification(
                         type: .log,
-                        message: "Workspace reload complete",
+                        message: "Workspace load finished; build description regeneration scheduled",
                         structure: .end(.init())
                     ))
                 } catch {
