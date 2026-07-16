@@ -50,9 +50,11 @@ public struct XcodePaths: Sendable {
     }
 
     /// Gets the developer directory from environment or xcode-select.
-    public static func getDeveloperDir() async throws -> String {
+    public static func getDeveloperDir(
+        environment: any EnvironmentRepository = ProcessEnvironmentRepository()
+    ) async throws -> String {
         // 1. Check environment override first
-        if let envPath = ProcessInfo.processInfo.environment["DEVELOPER_DIR"] {
+        if let envPath = environment.get("DEVELOPER_DIR") {
             guard FileManager.default.fileExists(atPath: envPath) else {
                 throw XcodePathError.developerDirNotFound(envPath)
             }

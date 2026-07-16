@@ -1,4 +1,3 @@
-import Darwin
 import Foundation
 import SwiftBuild
 
@@ -69,24 +68,25 @@ public struct RealBuildServiceProvider: BuildServiceProviding {
     ///   Package.swift dependency).
     public static func makeDefault(
         serviceBundlePath: String? = nil,
-        synchronousBuildDescriptionSerialization: Bool = true
+        synchronousBuildDescriptionSerialization: Bool = true,
+        environment: any EnvironmentRepository = ProcessEnvironmentRepository()
     ) async throws -> RealBuildServiceProvider {
         // Always set explicitly so our config wins over any inherited environment value.
-        setenv(
+        environment.set(
             "UseSynchronousBuildDescriptionSerialization",
-            synchronousBuildDescriptionSerialization ? "YES" : "NO",
-            1
+            value: synchronousBuildDescriptionSerialization ? "YES" : "NO",
+            overwrite: true
         )
         if let serviceBundlePath {
             // An explicit path from the config is authoritative.
-            setenv("SWBBUILDSERVICE_PATH", serviceBundlePath, 1)
+            environment.set("SWBBUILDSERVICE_PATH", value: serviceBundlePath, overwrite: true)
         } else if let execURL = Bundle.main.executableURL {
             let serviceURL = execURL.deletingLastPathComponent()
                 .appendingPathComponent("SWBBuildServiceBundle")
             if FileManager.default.isExecutableFile(atPath: serviceURL.path) {
-                // Use 0 (don't overwrite) so an explicit SWBBUILDSERVICE_PATH already in
-                // the environment still takes precedence over the co-located default.
-                setenv("SWBBUILDSERVICE_PATH", serviceURL.path, 0)
+                // overwrite: false so an explicit SWBBUILDSERVICE_PATH in the environment
+                // still takes precedence over the co-located default.
+                environment.set("SWBBUILDSERVICE_PATH", value: serviceURL.path, overwrite: false)
             }
         }
         let service = try await SWBBuildService(connectionMode: .outOfProcess, serviceBundleURL: nil)
