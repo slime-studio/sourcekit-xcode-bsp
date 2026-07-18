@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 private let logger = StderrLogger(category: "watcher")
 
@@ -88,7 +89,7 @@ final class WatcherContext: @unchecked Sendable {
     let queue: DispatchQueue
     let onChange: @Sendable () -> Void
 
-    private let lock = NSLock()
+    private let lock = OSAllocatedUnfairLock()
     private var pendingWorkItem: DispatchWorkItem?
 
     init(
@@ -109,27 +110,39 @@ final class WatcherContext: @unchecked Sendable {
     }
 
     func cancelPending() {
-        lock.lock()
-        pendingWorkItem?.cancel()
-        pendingWorkItem = nil
-        lock.unlock()
+        lock.withLockUnchecked {
+            pendingWorkItem?.cancel()
+            pendingWorkItem = nil
+        }
     }
 
     private func scheduleDebouncedChange() {
         // FSEvents callbacks already run on `queue`; keep scheduling on the same queue.
-        lock.lock()
-        pendingWorkItem?.cancel()
+        // Box so the work item can read its own `isCancelled` after a cooperative cancel.
+        let box = WorkItemBox()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            self.lock.lock()
-            self.pendingWorkItem = nil
-            self.lock.unlock()
+            self.lock.withLockUnchecked {
+                if self.pendingWorkItem === box.work {
+                    self.pendingWorkItem = nil
+                }
+            }
+            // cancel() is cooperative; skip if stop() cancelled us mid-flight.
+            guard !box.work.isCancelled else { return }
             self.onChange()
         }
-        pendingWorkItem = work
+        box.work = work
+        lock.withLockUnchecked {
+            pendingWorkItem?.cancel()
+            pendingWorkItem = work
+        }
         queue.asyncAfter(deadline: .now() + debounceInterval, execute: work)
-        lock.unlock()
     }
+}
+
+/// Lets a `DispatchWorkItem` observe its own cancel flag from inside its block.
+private final class WorkItemBox: @unchecked Sendable {
+    var work: DispatchWorkItem!
 }
 
 /// FSEvents callback function.
