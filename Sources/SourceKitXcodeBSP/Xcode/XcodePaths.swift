@@ -1,4 +1,5 @@
 import Foundation
+import SWBUtil
 
 /// Resolved paths to Xcode components.
 public struct XcodePaths: Sendable {
@@ -131,12 +132,14 @@ public struct XcodePathsService: Sendable {
         process.standardError = FileHandle.nullDevice
 
         do {
-            try await process.run()
+            // SWBUtil's run(interruptible:) suspends until the process actually
+            // exits (via terminationHandler) and propagates task cancellation as
+            // SIGTERM. Foundation's own Process.run() only launches the process
+            // and returns immediately.
+            try await process.run(interruptible: true)
         } catch {
             throw XcodePathError.xcodeSelectFailed(underlying: error)
         }
-
-        process.waitUntilExit()
 
         guard process.terminationStatus == 0 else {
             throw XcodePathError.xcodeSelectFailed(underlying: nil)

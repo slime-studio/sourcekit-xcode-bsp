@@ -42,6 +42,7 @@ let package = Package(
             name: "SourceKitXcodeBSP",
             dependencies: [
                 .product(name: "SwiftBuild", package: "swift-build"),
+                .product(name: "SWBUtil", package: "swift-build"),
                 .product(name: "BuildServerProtocol", package: "swift-tools-protocols"),
                 .product(name: "LanguageServerProtocol", package: "swift-tools-protocols"),
                 .product(name: "LanguageServerProtocolTransport", package: "swift-tools-protocols"),
