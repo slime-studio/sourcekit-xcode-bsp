@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 private let logger = StderrLogger(category: "watcher")
 
@@ -10,19 +11,29 @@ public final class WorkspaceWatcher: @unchecked Sendable {
     /// Creates a watcher for the given workspace.
     ///
     /// Uses FSEvents to recursively watch the directory containing the workspace,
-    /// filtering for relevant project files (project.pbxproj, Package.resolved, etc).
+    /// then filters events to exact canonical metadata paths (ignoring `.git`,
+    /// `.build`, DerivedData, package checkouts, etc.) and debounces bursts.
     ///
     /// - Parameters:
     ///   - workspacePath: Path to `.xcworkspace` or `.xcodeproj`.
+    ///   - debounceInterval: Quiet period after the last relevant FSEvents
+    ///     delivery before calling `onChange`. Stacks on top of the stream's
+    ///     1.0 s latency (default 3.0 s → ~4 s total).
     ///   - onChange: Called when project structure changes.
     public init?(
         workspacePath: String,
+        debounceInterval: TimeInterval = 3.0,
         onChange: @escaping @Sendable () -> Void
     ) {
         let url = URL(fileURLWithPath: workspacePath)
         let watchPath = url.deletingLastPathComponent().path
+        let filter = WorkspaceChangeFilter(workspacePath: workspacePath)
 
-        context = WatcherContext(onChange: onChange)
+        context = WatcherContext(
+            filter: filter,
+            debounceInterval: debounceInterval,
+            onChange: onChange
+        )
 
         var fsContext = FSEventStreamContext(
             version: 0,
@@ -46,24 +57,23 @@ public final class WorkspaceWatcher: @unchecked Sendable {
         }
 
         self.stream = stream
+        logger.info(
+            "Watching \(watchPath) for \(filter.allowedPaths.count) canonical metadata path(s)"
+        )
     }
 
     deinit {
         stop()
     }
 
-    /// Updates the change callback. Call before start().
-    public func setOnChange(_ onChange: @escaping @Sendable () -> Void) {
-        context.onChange = onChange
-    }
-
     public func start() {
         guard let stream else { return }
-        FSEventStreamSetDispatchQueue(stream, DispatchQueue.global(qos: .utility))
+        FSEventStreamSetDispatchQueue(stream, context.queue)
         FSEventStreamStart(stream)
     }
 
     public func stop() {
+        context.cancelPending()
         guard let stream else { return }
         FSEventStreamStop(stream)
         FSEventStreamInvalidate(stream)
@@ -72,21 +82,67 @@ public final class WorkspaceWatcher: @unchecked Sendable {
     }
 }
 
-/// Context for FSEvents callback.
-private final class WatcherContext: @unchecked Sendable {
-    var onChange: @Sendable () -> Void
+/// Context for FSEvents callback: exact-path filtering + trailing debounce.
+final class WatcherContext: @unchecked Sendable {
+    let filter: WorkspaceChangeFilter
+    let debounceInterval: TimeInterval
+    let queue: DispatchQueue
+    let onChange: @Sendable () -> Void
 
-    init(onChange: @escaping @Sendable () -> Void) {
+    private let lock = OSAllocatedUnfairLock()
+    private var pendingWorkItem: DispatchWorkItem?
+
+    init(
+        filter: WorkspaceChangeFilter,
+        debounceInterval: TimeInterval,
+        onChange: @escaping @Sendable () -> Void,
+        queue: DispatchQueue = DispatchQueue(label: "sourcekit-xcode-bsp.watcher", qos: .utility)
+    ) {
+        self.filter = filter
+        self.debounceInterval = debounceInterval
         self.onChange = onChange
+        self.queue = queue
     }
 
-    func isRelevantChange(path: String) -> Bool {
-        let filename = (path as NSString).lastPathComponent
-        return filename == "project.pbxproj"
-            || filename == "contents.xcworkspacedata"
-            || filename == "Package.resolved"
-            || filename == "Package.swift"
+    func handle(paths: [String]) {
+        guard paths.contains(where: { filter.isRelevantChange(path: $0) }) else { return }
+        scheduleDebouncedChange()
     }
+
+    func cancelPending() {
+        lock.withLockUnchecked {
+            pendingWorkItem?.cancel()
+            pendingWorkItem = nil
+        }
+    }
+
+    private func scheduleDebouncedChange() {
+        // FSEvents callbacks already run on `queue`; keep scheduling on the same queue.
+        // Box so the work item can read its own `isCancelled` after a cooperative cancel.
+        let box = WorkItemBox()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.lock.withLockUnchecked {
+                if self.pendingWorkItem === box.work {
+                    self.pendingWorkItem = nil
+                }
+            }
+            // cancel() is cooperative; skip if stop() cancelled us mid-flight.
+            guard !box.work.isCancelled else { return }
+            self.onChange()
+        }
+        box.work = work
+        lock.withLockUnchecked {
+            pendingWorkItem?.cancel()
+            pendingWorkItem = work
+        }
+        queue.asyncAfter(deadline: .now() + debounceInterval, execute: work)
+    }
+}
+
+/// Lets a `DispatchWorkItem` observe its own cancel flag from inside its block.
+private final class WorkItemBox: @unchecked Sendable {
+    var work: DispatchWorkItem!
 }
 
 /// FSEvents callback function.
@@ -102,11 +158,5 @@ private func fsEventCallback(
     let context = Unmanaged<WatcherContext>.fromOpaque(info).takeUnretainedValue()
 
     let paths = unsafeBitCast(eventPaths, to: NSArray.self) as? [String] ?? []
-
-    for path in paths {
-        if context.isRelevantChange(path: path) {
-            context.onChange()
-            return // Only trigger once per batch
-        }
-    }
+    context.handle(paths: paths)
 }

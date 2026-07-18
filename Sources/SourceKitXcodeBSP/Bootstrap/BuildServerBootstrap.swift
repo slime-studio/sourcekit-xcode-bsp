@@ -167,21 +167,31 @@ public struct BuildServerBootstrap: Sendable {
             fatalError("runServer requires RealBuildServiceSession")
         }
 
-        // Create watcher before continuation to ensure it's retained
-        let watcher = WorkspaceWatcher(
-            workspacePath: workspacePath,
-            onChange: {} // Placeholder, will be replaced
-        )
-
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             // Guard against double-resume: exitHandler and closeHandler can both fire
             let resumed = OSAllocatedUnfairLock(initialState: false)
+            let reloadTasks = OSAllocatedUnfairLock(initialState: [Task<Void, Never>]())
+            // Retained across finish / onChange; set after coordinator is created.
+            let watcherBox = OSAllocatedUnfairLock<WorkspaceWatcher?>(initialState: nil)
+            let coordinatorBox = OSAllocatedUnfairLock<WorkspaceReloadCoordinator?>(initialState: nil)
 
             @Sendable func finish(
                 _ result: Result<Void, any Error>,
                 closeConnection: Bool
             ) {
-                watcher?.stop()
+                let tasks = reloadTasks.withLock { tasks -> [Task<Void, Never>] in
+                    let copy = tasks
+                    tasks.removeAll()
+                    return copy
+                }
+                for task in tasks {
+                    task.cancel()
+                }
+                if let coordinator = coordinatorBox.withLock({ $0 }) {
+                    Task { await coordinator.cancel() }
+                }
+                watcherBox.withLock { $0 }?.stop()
+
                 let alreadyResumed = resumed.withLock { val -> Bool in
                     if val { return true }
                     val = true
@@ -216,24 +226,56 @@ public struct BuildServerBootstrap: Sendable {
                 }
             )
 
-            // Configure watcher callback now that we have server reference
-            watcher?.setOnChange { [server] in
-                Task {
-                    logger.info("Project changed, reloading workspace...")
-                    connection.send(OnBuildLogMessageNotification(
-                        type: .log,
-                        message: "Reloading workspace...",
-                        structure: .begin(.init(title: "Reloading workspace"))
-                    ))
-                    // Reload workspace on session then notify server to regenerate
-                    // build description (.session pifSource uses sessionPIFURI).
-                    try? await realSession.session.loadWorkspace(containerPath: workspacePath)
+            // Coalesce FSEvents bursts and serialize loadWorkspace + regenerate so
+            // overlapping client/server notifications cannot interleave reloads.
+            let reloadCoordinator = WorkspaceReloadCoordinator { [server] in
+                guard !Task.isCancelled else { return }
+                logger.info("Project changed, reloading workspace...")
+                connection.send(OnBuildLogMessageNotification(
+                    type: .log,
+                    message: "Reloading workspace...",
+                    structure: .begin(.init(title: "Reloading workspace"))
+                ))
+                // Reload workspace on session then notify server to regenerate
+                // build description (.session pifSource uses sessionPIFURI).
+                // handle() only schedules regenerate on SWB's serial queue and
+                // returns; we cannot await that work from here, so a trailing
+                // loadWorkspace may still overlap an in-flight regenerate.
+                do {
+                    try await realSession.session.loadWorkspace(containerPath: workspacePath)
+                    guard !Task.isCancelled else { return }
                     let notification = OnWatchedFilesDidChangeNotification(
                         changes: [FileEvent(uri: SWBBuildServer.sessionPIFURI, type: .changed)]
                     )
                     await server.handle(notification: notification)
+                    connection.send(OnBuildLogMessageNotification(
+                        type: .log,
+                        message: "Workspace load finished; build description regeneration scheduled",
+                        structure: .end(.init())
+                    ))
+                } catch is CancellationError {
+                    return
+                } catch {
+                    logger.error("Workspace reload failed: \(error)")
+                    connection.send(OnBuildLogMessageNotification(
+                        type: .error,
+                        message: "Workspace reload failed: \(error)",
+                        structure: .end(.init())
+                    ))
                 }
             }
+            coordinatorBox.withLock { $0 = reloadCoordinator }
+
+            let watcher = WorkspaceWatcher(
+                workspacePath: workspacePath,
+                onChange: {
+                    let task = Task {
+                        await reloadCoordinator.requestReload()
+                    }
+                    reloadTasks.withLock { $0.append(task) }
+                }
+            )
+            watcherBox.withLock { $0 = watcher }
             watcher?.start()
 
             connection.start(receiveHandler: server) {
