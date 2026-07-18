@@ -35,7 +35,8 @@ public struct WorkspaceChangeFilter: Sendable {
 
     /// Canonical metadata paths for `workspacePath`.
     ///
-    /// Includes the container's own project file and adjacent SwiftPM lock/manifest
+    /// Includes the container's own project file, embedded SwiftPM `Package.resolved`
+    /// (inside the project/workspace bundle), and adjacent SwiftPM lock/manifest
     /// files. Sibling `.xcodeproj` / `.xcworkspace` metadata at the same parent level
     /// is included so multi-project roots still reload without matching nested
     /// package checkouts.
@@ -50,9 +51,9 @@ public struct WorkspaceChangeFilter: Sendable {
 
         switch workspaceURL.pathExtension {
         case "xcodeproj":
-            paths.insert(workspaceURL.appendingPathComponent("project.pbxproj").path)
+            paths.formUnion(Self.xcodeprojMetadataPaths(for: workspaceURL))
         case "xcworkspace":
-            paths.insert(workspaceURL.appendingPathComponent("contents.xcworkspacedata").path)
+            paths.formUnion(Self.xcworkspaceMetadataPaths(for: workspaceURL))
         default:
             break
         }
@@ -68,9 +69,9 @@ public struct WorkspaceChangeFilter: Sendable {
             for sibling in siblings {
                 switch sibling.pathExtension {
                 case "xcodeproj":
-                    paths.insert(sibling.appendingPathComponent("project.pbxproj").path)
+                    paths.formUnion(Self.xcodeprojMetadataPaths(for: sibling))
                 case "xcworkspace":
-                    paths.insert(sibling.appendingPathComponent("contents.xcworkspacedata").path)
+                    paths.formUnion(Self.xcworkspaceMetadataPaths(for: sibling))
                 default:
                     continue
                 }
@@ -78,6 +79,30 @@ public struct WorkspaceChangeFilter: Sendable {
         }
 
         return paths
+    }
+
+    /// Metadata paths for an `.xcodeproj`, including the embedded SPM lock file.
+    private static func xcodeprojMetadataPaths(for projectURL: URL) -> Set<String> {
+        [
+            projectURL.appendingPathComponent("project.pbxproj").path,
+            // Xcode writes package resolution state inside the project container.
+            projectURL
+                .appendingPathComponent("project.xcworkspace")
+                .appendingPathComponent("xcshareddata")
+                .appendingPathComponent("swiftpm")
+                .appendingPathComponent("Package.resolved").path,
+        ]
+    }
+
+    /// Metadata paths for an `.xcworkspace`, including shared SPM lock file.
+    private static func xcworkspaceMetadataPaths(for workspaceURL: URL) -> Set<String> {
+        [
+            workspaceURL.appendingPathComponent("contents.xcworkspacedata").path,
+            workspaceURL
+                .appendingPathComponent("xcshareddata")
+                .appendingPathComponent("swiftpm")
+                .appendingPathComponent("Package.resolved").path,
+        ]
     }
 
     /// Returns whether `path` should trigger a workspace reload.

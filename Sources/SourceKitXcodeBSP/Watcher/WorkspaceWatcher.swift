@@ -63,11 +63,6 @@ public final class WorkspaceWatcher: @unchecked Sendable {
         stop()
     }
 
-    /// Updates the change callback. Call before start().
-    public func setOnChange(_ onChange: @escaping @Sendable () -> Void) {
-        context.onChange = onChange
-    }
-
     public func start() {
         guard let stream else { return }
         FSEventStreamSetDispatchQueue(stream, context.queue)
@@ -89,7 +84,7 @@ final class WatcherContext: @unchecked Sendable {
     let filter: WorkspaceChangeFilter
     let debounceInterval: TimeInterval
     let queue: DispatchQueue
-    var onChange: @Sendable () -> Void
+    let onChange: @Sendable () -> Void
 
     private let lock = NSLock()
     private var pendingWorkItem: DispatchWorkItem?

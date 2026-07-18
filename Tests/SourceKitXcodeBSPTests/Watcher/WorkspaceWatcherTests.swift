@@ -16,6 +16,17 @@ struct WorkspaceChangeFilterTests {
         #expect(filter.isRelevantChange(path: "/Projects/App/App.xcodeproj/project.pbxproj"))
     }
 
+    @Test("Accepts embedded SPM Package.resolved inside xcodeproj")
+    func acceptsEmbeddedXcodeprojPackageResolved() {
+        let workspace = "/Projects/App/App.xcodeproj"
+        let filter = WorkspaceChangeFilter(
+            allowedPaths: WorkspaceChangeFilter.canonicalMetadataPaths(for: workspace)
+        )
+        let embedded =
+            "/Projects/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+        #expect(filter.isRelevantChange(path: embedded))
+    }
+
     @Test("Accepts the configured xcworkspace metadata path")
     func acceptsConfiguredXcworkspace() {
         let workspace = "/Projects/App/App.xcworkspace"
@@ -28,6 +39,17 @@ struct WorkspaceChangeFilterTests {
                 path: "/Projects/App/App.xcworkspace/contents.xcworkspacedata"
             )
         )
+    }
+
+    @Test("Accepts embedded SPM Package.resolved inside xcworkspace")
+    func acceptsEmbeddedXcworkspacePackageResolved() {
+        let workspace = "/Projects/App/App.xcworkspace"
+        let filter = WorkspaceChangeFilter(
+            allowedPaths: WorkspaceChangeFilter.canonicalMetadataPaths(for: workspace)
+        )
+        let embedded =
+            "/Projects/App/App.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+        #expect(filter.isRelevantChange(path: embedded))
     }
 
     @Test("Accepts adjacent Package.swift / Package.resolved")
@@ -137,6 +159,11 @@ struct WorkspaceChangeFilterTests {
             for: "/Projects/App/App.xcodeproj"
         )
         #expect(paths.contains("/Projects/App/App.xcodeproj/project.pbxproj"))
+        #expect(
+            paths.contains(
+                "/Projects/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+            )
+        )
         #expect(paths.contains("/Projects/App/Package.swift"))
         #expect(paths.contains("/Projects/App/Package.resolved"))
     }
@@ -147,6 +174,11 @@ struct WorkspaceChangeFilterTests {
             for: "/Projects/App/App.xcworkspace"
         )
         #expect(paths.contains("/Projects/App/App.xcworkspace/contents.xcworkspacedata"))
+        #expect(
+            paths.contains(
+                "/Projects/App/App.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+            )
+        )
         #expect(paths.contains("/Projects/App/Package.swift"))
         #expect(paths.contains("/Projects/App/Package.resolved"))
     }
@@ -211,6 +243,7 @@ struct WorkspaceReloadCoordinatorTests {
     @Test("Serializes reloads and runs a trailing pass for mid-flight requests")
     func serializesAndCoalesces() async {
         let state = OSAllocatedUnfairLock(initialState: (started: 0, maxConcurrent: 0, inFlight: 0, finished: 0))
+        let (startedStream, startedContinuation) = AsyncStream.makeStream(of: Void.self)
 
         let coordinator = WorkspaceReloadCoordinator {
             state.withLock { s in
@@ -218,6 +251,7 @@ struct WorkspaceReloadCoordinatorTests {
                 s.inFlight += 1
                 s.maxConcurrent = max(s.maxConcurrent, s.inFlight)
             }
+            startedContinuation.yield(())
             try? await Task.sleep(for: .milliseconds(40))
             state.withLock { s in
                 s.inFlight -= 1
@@ -226,15 +260,41 @@ struct WorkspaceReloadCoordinatorTests {
         }
 
         async let first: Void = coordinator.requestReload()
-        // Let the first reload start before stacking follow-ups.
-        try? await Task.sleep(for: .milliseconds(5))
+        // Wait until the first reload body has started, then stack follow-ups.
+        for await _ in startedStream {
+            break
+        }
         async let second: Void = coordinator.requestReload()
         async let third: Void = coordinator.requestReload()
         _ = await (first, second, third)
+        startedContinuation.finish()
 
         let snapshot = state.withLock { $0 }
         #expect(snapshot.maxConcurrent == 1)
         #expect(snapshot.started == 2)
         #expect(snapshot.finished == 2)
+    }
+
+    @Test("cancel prevents new and trailing reloads")
+    func cancelStopsReloads() async {
+        let started = OSAllocatedUnfairLock(initialState: 0)
+        let (startedStream, startedContinuation) = AsyncStream.makeStream(of: Void.self)
+
+        let coordinator = WorkspaceReloadCoordinator {
+            started.withLock { $0 += 1 }
+            startedContinuation.yield(())
+            try? await Task.sleep(for: .milliseconds(40))
+        }
+
+        async let first: Void = coordinator.requestReload()
+        for await _ in startedStream {
+            break
+        }
+        await coordinator.cancel()
+        await coordinator.requestReload()
+        _ = await first
+        startedContinuation.finish()
+
+        #expect(started.withLock { $0 } == 1)
     }
 }
