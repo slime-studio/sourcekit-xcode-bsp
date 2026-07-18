@@ -15,11 +15,13 @@ public final class WorkspaceWatcher: @unchecked Sendable {
     ///
     /// - Parameters:
     ///   - workspacePath: Path to `.xcworkspace` or `.xcodeproj`.
-    ///   - debounceInterval: Quiet period before delivering `onChange`.
+    ///   - debounceInterval: Quiet period after the last relevant FSEvents
+    ///     delivery before calling `onChange`. Stacks on top of the stream's
+    ///     1.0 s latency (default 3.0 s → ~4 s total).
     ///   - onChange: Called when project structure changes.
     public init?(
         workspacePath: String,
-        debounceInterval: TimeInterval = 0.5,
+        debounceInterval: TimeInterval = 3.0,
         onChange: @escaping @Sendable () -> Void
     ) {
         let url = URL(fileURLWithPath: workspacePath)
