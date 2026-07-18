@@ -1,6 +1,6 @@
 import Foundation
 
-/// Resolves paths to Xcode components including SWBBuildService.
+/// Resolved paths to Xcode components.
 public struct XcodePaths: Sendable {
     /// Path to the Developer directory (e.g., /Applications/Xcode.app/Contents/Developer).
     public let developerDir: String
@@ -22,7 +22,7 @@ public struct XcodePaths: Sendable {
             .deletingLastPathComponent() // SWBBuildService.bundle
     }
 
-    /// Initializes by resolving paths from the developer directory.
+    /// Initializes from a known developer directory path.
     ///
     /// - Parameter developerDir: The Xcode developer directory path.
     /// - Throws: `XcodePathError` if paths cannot be resolved.
@@ -39,65 +39,7 @@ public struct XcodePaths: Sendable {
         swbBuildService = Self.findSWBBuildService(in: xcodeApp)
     }
 
-    /// Resolves Xcode paths using environment or xcode-select.
-    ///
-    /// Resolution order:
-    /// 1. `DEVELOPER_DIR` environment variable
-    /// 2. `xcode-select -p` output
-    public static func resolve() async throws -> XcodePaths {
-        let developerDir = try await getDeveloperDir()
-        return try XcodePaths(developerDir: developerDir)
-    }
-
-    /// Gets the developer directory from environment or xcode-select.
-    public static func getDeveloperDir(
-        environment: any EnvironmentRepository = ProcessEnvironmentRepository()
-    ) async throws -> String {
-        // 1. Check environment override first
-        if let envPath = environment.get("DEVELOPER_DIR") {
-            guard FileManager.default.fileExists(atPath: envPath) else {
-                throw XcodePathError.developerDirNotFound(envPath)
-            }
-            return envPath
-        }
-
-        // 2. Fall back to xcode-select
-        return try await runXcodeSelect()
-    }
-
     // MARK: - Private
-
-    private static func runXcodeSelect() async throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/xcode-select")
-        process.arguments = ["-p"]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-
-        do {
-            try await process.run()
-        } catch {
-            throw XcodePathError.xcodeSelectFailed(underlying: error)
-        }
-
-        process.waitUntilExit()
-
-        guard process.terminationStatus == 0 else {
-            throw XcodePathError.xcodeSelectFailed(underlying: nil)
-        }
-
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard let path = String(data: data, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-            !path.isEmpty
-        else {
-            throw XcodePathError.xcodeSelectFailed(underlying: nil)
-        }
-
-        return path
-    }
 
     private static func readVersion(from xcodeApp: URL) throws -> XcodeVersion {
         let infoPlist = xcodeApp.appendingPathComponent("Contents/Info.plist")
@@ -147,6 +89,68 @@ public struct XcodePaths: Sendable {
         }
 
         return nil
+    }
+}
+
+/// Resolves Xcode paths by querying the process environment and filesystem.
+///
+/// Resolution order:
+/// 1. `DEVELOPER_DIR` environment variable
+/// 2. `xcode-select -p` output
+public struct XcodePathsService: Sendable {
+    private let environment: any EnvironmentRepository
+
+    public init(environment: any EnvironmentRepository = ProcessEnvironmentRepository()) {
+        self.environment = environment
+    }
+
+    public func resolve() async throws -> XcodePaths {
+        let developerDir = try await getDeveloperDir()
+        return try XcodePaths(developerDir: developerDir)
+    }
+
+    // MARK: - Private
+
+    private func getDeveloperDir() async throws -> String {
+        if let envPath = environment.get("DEVELOPER_DIR") {
+            guard FileManager.default.fileExists(atPath: envPath) else {
+                throw XcodePathError.developerDirNotFound(envPath)
+            }
+            return envPath
+        }
+        return try await runXcodeSelect()
+    }
+
+    private func runXcodeSelect() async throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/xcode-select")
+        process.arguments = ["-p"]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try await process.run()
+        } catch {
+            throw XcodePathError.xcodeSelectFailed(underlying: error)
+        }
+
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            throw XcodePathError.xcodeSelectFailed(underlying: nil)
+        }
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let path = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !path.isEmpty
+        else {
+            throw XcodePathError.xcodeSelectFailed(underlying: nil)
+        }
+
+        return path
     }
 }
 
