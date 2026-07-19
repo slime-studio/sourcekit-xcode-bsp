@@ -1,5 +1,4 @@
 import Foundation
-import SWBUtil
 
 /// Resolved paths to Xcode components.
 public struct XcodePaths: Sendable {
@@ -100,9 +99,14 @@ public struct XcodePaths: Sendable {
 /// 2. `xcode-select -p` output
 public struct XcodePathsService: Sendable {
     private let environment: any EnvironmentRepository
+    private let processRunner: ProcessRunner
 
-    public init(environment: any EnvironmentRepository = ProcessEnvironmentRepository()) {
+    public init(
+        environment: any EnvironmentRepository = ProcessEnvironmentRepository(),
+        processRunner: ProcessRunner = ProcessRunner()
+    ) {
         self.environment = environment
+        self.processRunner = processRunner
     }
 
     public func resolve() async throws -> XcodePaths {
@@ -123,36 +127,22 @@ public struct XcodePathsService: Sendable {
     }
 
     private func runXcodeSelect() async throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/xcode-select")
-        process.arguments = ["-p"]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-
+        let output: ProcessRunner.Output
         do {
-            // SWBUtil's run(interruptible:) suspends until the process actually
-            // exits (via terminationHandler) and propagates task cancellation as
-            // SIGTERM. Foundation's own Process.run() only launches the process
-            // and returns immediately.
-            try await process.run(interruptible: true)
+            output = try await processRunner.run(
+                executableURL: URL(fileURLWithPath: "/usr/bin/xcode-select"),
+                arguments: ["-p"]
+            )
         } catch {
             throw XcodePathError.xcodeSelectFailed(underlying: error)
         }
 
-        guard process.terminationStatus == 0 else {
-            throw XcodePathError.xcodeSelectFailed(underlying: nil)
-        }
-
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard let path = String(data: data, encoding: .utf8)?
+        guard let path = String(data: output.stdout, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             !path.isEmpty
         else {
             throw XcodePathError.xcodeSelectFailed(underlying: nil)
         }
-
         return path
     }
 }

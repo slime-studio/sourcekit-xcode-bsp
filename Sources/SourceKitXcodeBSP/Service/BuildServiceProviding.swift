@@ -72,24 +72,72 @@ public struct BuildServiceProviderFactory: Sendable {
         return RealBuildServiceProvider(service: service)
     }
 
-    private func configureEnvironment() {
-        // Always set explicitly so our config wins over any inherited environment value.
-        environment.set(
-            "UseSynchronousBuildDescriptionSerialization",
-            value: synchronousBuildDescriptionSerialization ? "YES" : "NO",
-            overwrite: true
-        )
+    /// A single environment variable `make()` sets before launching the build service.
+    struct EnvironmentAssignment: Equatable, Sendable {
+        let key: String
+        let value: String
+        let overwrite: Bool
+    }
+
+    /// Computes which environment variables `configureEnvironment()` should set, and to what.
+    ///
+    /// SwiftBuild only accepts a path to a flat (non-`.bundle`) service executable via the
+    /// `SWBBUILDSERVICE_PATH` environment variable, so that is how the resolved path is
+    /// handed to the framework. We prefer the service built from the same swift-build
+    /// checkout over the (older) one the framework's Xcode.app PlugIns lookup would find.
+    ///
+    /// Pure and independent of `EnvironmentRepository`/`SWBBuildService`, so it can be
+    /// tested directly without a fake environment or launching a real out-of-process service.
+    ///
+    /// - Parameters:
+    ///   - serviceBundlePath: Explicit service executable path from `buildServer.json`
+    ///     (`serviceBundlePath`). Authoritative when present.
+    ///   - coLocatedServiceBundlePath: Path to the `SWBBuildServiceBundle` co-located next
+    ///     to this executable, if one exists there. Used as a fallback default.
+    static func environmentAssignments(
+        serviceBundlePath: String?,
+        synchronousBuildDescriptionSerialization: Bool,
+        coLocatedServiceBundlePath: String?
+    ) -> [EnvironmentAssignment] {
+        var assignments = [
+            EnvironmentAssignment(
+                key: "UseSynchronousBuildDescriptionSerialization",
+                // Always set explicitly so our config wins over any inherited environment value.
+                value: synchronousBuildDescriptionSerialization ? "YES" : "NO",
+                overwrite: true
+            ),
+        ]
         if let serviceBundlePath {
             // An explicit path from the config is authoritative — overwrite any inherited value.
-            environment.set("SWBBUILDSERVICE_PATH", value: serviceBundlePath, overwrite: true)
-        } else if let execURL = Bundle.main.executableURL {
+            assignments.append(
+                EnvironmentAssignment(key: "SWBBUILDSERVICE_PATH", value: serviceBundlePath, overwrite: true)
+            )
+        } else if let coLocatedServiceBundlePath {
+            // overwrite: false so an explicit SWBBUILDSERVICE_PATH already in the
+            // environment still takes precedence over the co-located default.
+            assignments.append(
+                EnvironmentAssignment(
+                    key: "SWBBUILDSERVICE_PATH", value: coLocatedServiceBundlePath, overwrite: false
+                )
+            )
+        }
+        return assignments
+    }
+
+    private func configureEnvironment() {
+        let coLocatedServiceBundlePath: String? = {
+            guard let execURL = Bundle.main.executableURL else { return nil }
             let serviceURL = execURL.deletingLastPathComponent()
                 .appendingPathComponent("SWBBuildServiceBundle")
-            if FileManager.default.isExecutableFile(atPath: serviceURL.path) {
-                // overwrite: false so an explicit SWBBUILDSERVICE_PATH in the environment
-                // still takes precedence over the co-located default.
-                environment.set("SWBBUILDSERVICE_PATH", value: serviceURL.path, overwrite: false)
-            }
+            return FileManager.default.isExecutableFile(atPath: serviceURL.path) ? serviceURL.path : nil
+        }()
+
+        for assignment in Self.environmentAssignments(
+            serviceBundlePath: serviceBundlePath,
+            synchronousBuildDescriptionSerialization: synchronousBuildDescriptionSerialization,
+            coLocatedServiceBundlePath: coLocatedServiceBundlePath
+        ) {
+            environment.set(assignment.key, value: assignment.value, overwrite: assignment.overwrite)
         }
     }
 }
