@@ -5,7 +5,6 @@ import Foundation
 import LanguageServerProtocol
 import LanguageServerProtocolTransport
 import SourceKitXcodeBSP
-import SwiftBuild
 
 @main
 struct SourcekitXcodeBspCommand: AsyncParsableCommand {
@@ -37,13 +36,10 @@ struct Serve: AsyncParsableCommand {
         let workspacePath = try ConfigLoader.resolveWorkspacePath(config: config, relativeTo: cwd)
         let buildRoot = ConfigLoader.resolveBuildRoot(config: config, relativeTo: cwd)
 
-        // Create service provider. Use the SWBBuildService path from config if set,
-        // otherwise fall back to the co-located service.
-        let serviceBundlePath = ConfigLoader.resolveServiceBundlePath(config: config, relativeTo: cwd)
-        let serviceProvider = try await RealBuildServiceProvider.makeDefault(
-            serviceBundlePath: serviceBundlePath,
+        let serviceProvider = try await BuildServiceProviderFactory(
+            serviceBundlePath: ConfigLoader.resolveServiceBundlePath(config: config, relativeTo: cwd),
             synchronousBuildDescriptionSerialization: config.synchronousBuildDescriptionSerialization ?? true
-        )
+        ).make()
 
         // Create JSON-RPC connection
         let connection = JSONRPCConnection(

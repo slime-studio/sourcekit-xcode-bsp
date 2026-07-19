@@ -1,4 +1,3 @@
-import Darwin
 import Foundation
 import SwiftBuild
 
@@ -45,52 +44,112 @@ public protocol BuildServiceSessionProviding: Sendable {
     func close() async throws
 }
 
-// MARK: - Real Implementations
+// MARK: - Factory
 
-/// Real implementation of `BuildServiceProviding` using `SWBBuildService`.
-public struct RealBuildServiceProvider: BuildServiceProviding {
-    private let service: SWBBuildService
+/// Configures the process environment and vends a `BuildServiceProviding` instance.
+///
+/// SwiftBuild reads service configuration from environment variables before the
+/// out-of-process `SWBBuildService` launches, so all env setup must happen here,
+/// before `make()` calls `SWBBuildService(connectionMode: .outOfProcess)`.
+public struct BuildServiceProviderFactory: Sendable {
+    public let serviceBundlePath: String?
+    public let synchronousBuildDescriptionSerialization: Bool
+    private let environment: any EnvironmentRepository
 
-    /// Creates a provider with an existing service.
-    public init(service: SWBBuildService) {
-        self.service = service
+    public init(
+        serviceBundlePath: String? = nil,
+        synchronousBuildDescriptionSerialization: Bool = true,
+        environment: any EnvironmentRepository = ProcessEnvironmentRepository()
+    ) {
+        self.serviceBundlePath = serviceBundlePath
+        self.synchronousBuildDescriptionSerialization = synchronousBuildDescriptionSerialization
+        self.environment = environment
     }
 
-    /// Creates a provider with a default out-of-process connection.
+    public func make() async throws -> any BuildServiceProviding {
+        configureEnvironment()
+        let service = try await SWBBuildService(connectionMode: .outOfProcess, serviceBundleURL: nil)
+        return RealBuildServiceProvider(service: service)
+    }
+
+    /// A single environment variable `make()` sets before launching the build service.
+    struct EnvironmentAssignment: Equatable, Sendable {
+        let key: String
+        let value: String
+        let overwrite: Bool
+    }
+
+    /// Computes which environment variables `configureEnvironment()` should set, and to what.
     ///
     /// SwiftBuild only accepts a path to a flat (non-`.bundle`) service executable via the
     /// `SWBBUILDSERVICE_PATH` environment variable, so that is how the resolved path is
     /// handed to the framework. We prefer the service built from the same swift-build
     /// checkout over the (older) one the framework's Xcode.app PlugIns lookup would find.
     ///
-    /// - Parameter serviceBundlePath: Explicit service executable path from
-    ///   `buildServer.json` (`serviceBundlePath`). When `nil`, falls back to the
-    ///   `SWBBuildServiceBundle` co-located next to this executable (guaranteed by the
-    ///   Package.swift dependency).
-    public static func makeDefault(
-        serviceBundlePath: String? = nil,
-        synchronousBuildDescriptionSerialization: Bool = true
-    ) async throws -> RealBuildServiceProvider {
-        // Always set explicitly so our config wins over any inherited environment value.
-        setenv(
-            "UseSynchronousBuildDescriptionSerialization",
-            synchronousBuildDescriptionSerialization ? "YES" : "NO",
-            1
-        )
+    /// Pure and independent of `EnvironmentRepository`/`SWBBuildService`, so it can be
+    /// tested directly without a fake environment or launching a real out-of-process service.
+    ///
+    /// - Parameters:
+    ///   - serviceBundlePath: Explicit service executable path from `buildServer.json`
+    ///     (`serviceBundlePath`). Authoritative when present.
+    ///   - coLocatedServiceBundlePath: Path to the `SWBBuildServiceBundle` co-located next
+    ///     to this executable, if one exists there. Used as a fallback default.
+    static func environmentAssignments(
+        serviceBundlePath: String?,
+        synchronousBuildDescriptionSerialization: Bool,
+        coLocatedServiceBundlePath: String?
+    ) -> [EnvironmentAssignment] {
+        var assignments = [
+            EnvironmentAssignment(
+                key: "UseSynchronousBuildDescriptionSerialization",
+                // Always set explicitly so our config wins over any inherited environment value.
+                value: synchronousBuildDescriptionSerialization ? "YES" : "NO",
+                overwrite: true
+            ),
+        ]
         if let serviceBundlePath {
-            // An explicit path from the config is authoritative.
-            setenv("SWBBUILDSERVICE_PATH", serviceBundlePath, 1)
-        } else if let execURL = Bundle.main.executableURL {
+            // An explicit path from the config is authoritative — overwrite any inherited value.
+            assignments.append(
+                EnvironmentAssignment(key: "SWBBUILDSERVICE_PATH", value: serviceBundlePath, overwrite: true)
+            )
+        } else if let coLocatedServiceBundlePath {
+            // overwrite: false so an explicit SWBBUILDSERVICE_PATH already in the
+            // environment still takes precedence over the co-located default.
+            assignments.append(
+                EnvironmentAssignment(
+                    key: "SWBBUILDSERVICE_PATH", value: coLocatedServiceBundlePath, overwrite: false
+                )
+            )
+        }
+        return assignments
+    }
+
+    private func configureEnvironment() {
+        let coLocatedServiceBundlePath: String? = {
+            guard let execURL = Bundle.main.executableURL else { return nil }
             let serviceURL = execURL.deletingLastPathComponent()
                 .appendingPathComponent("SWBBuildServiceBundle")
-            if FileManager.default.isExecutableFile(atPath: serviceURL.path) {
-                // Use 0 (don't overwrite) so an explicit SWBBUILDSERVICE_PATH already in
-                // the environment still takes precedence over the co-located default.
-                setenv("SWBBUILDSERVICE_PATH", serviceURL.path, 0)
-            }
+            return FileManager.default.isExecutableFile(atPath: serviceURL.path) ? serviceURL.path : nil
+        }()
+
+        for assignment in Self.environmentAssignments(
+            serviceBundlePath: serviceBundlePath,
+            synchronousBuildDescriptionSerialization: synchronousBuildDescriptionSerialization,
+            coLocatedServiceBundlePath: coLocatedServiceBundlePath
+        ) {
+            environment.set(assignment.key, value: assignment.value, overwrite: assignment.overwrite)
         }
-        let service = try await SWBBuildService(connectionMode: .outOfProcess, serviceBundleURL: nil)
-        return RealBuildServiceProvider(service: service)
+    }
+}
+
+// MARK: - Real Implementations
+
+/// Real implementation of `BuildServiceProviding` using `SWBBuildService`.
+public struct RealBuildServiceProvider: BuildServiceProviding {
+    private let service: SWBBuildService
+
+    public init(service: SWBBuildService) {
+        self.service = service
     }
 
     public func createSession(
