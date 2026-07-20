@@ -1,0 +1,44 @@
+included:
+  - Sources
+  - Tests
+
+excluded:
+  - .build
+  - .swiftpm
+
+opt_in_rules:
+  - empty_count
+  - closure_spacing
+  - contains_over_first_not_nil
+  - fatal_error_message
+  - first_where
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - last_where
+  - redundant_nil_coalescing
+  - sorted_first_last
+  - unneeded_parentheses_in_closure_argument
+
+disabled_rules:
+  - todo
+
+line_length:
+  warning: 120
+  error: 200
+
+identifier_name:
+  excluded:
+    - id
+    - s
+    - t
+    - fm
+    - op
+    - v26_2
+    - v16_0
+    - v16_2_1
+
+force_unwrapping:
+  severity: warning
+
+implicitly_unwrapped_optional:
+  severity: warning

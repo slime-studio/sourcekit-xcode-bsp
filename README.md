@@ -110,7 +110,23 @@ swift test
 
 # Build release binary
 swift build -c release
+
+# Lint
+swiftlint lint
 ```
+
+### Pre-commit hooks
+
+This repo uses [pre-commit](https://pre-commit.com) to lint staged Swift files with
+[SwiftLint](https://github.com/realm/SwiftLint) before each commit.
+
+```bash
+brew install pre-commit swiftlint
+pre-commit install
+```
+
+After that, `git commit` runs SwiftLint automatically against whatever `.swift` files are
+staged. Run it manually against everything with `pre-commit run --all-files`.
 
 ### Project layout
 
