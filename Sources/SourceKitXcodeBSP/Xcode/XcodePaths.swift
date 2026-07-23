@@ -174,7 +174,7 @@ public struct XcodeVersion: Sendable, CustomStringConvertible {
 
     public init(versionString: String) {
         let parts = versionString.split(separator: ".").compactMap { Int($0) }
-        major = parts.count > 0 ? parts[0] : 0
+        major = !parts.isEmpty ? parts[0] : 0
         minor = parts.count > 1 ? parts[1] : 0
         patch = parts.count > 2 ? parts[2] : 0
     }

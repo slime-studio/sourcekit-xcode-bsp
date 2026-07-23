@@ -1,0 +1,10 @@
+repos:
+  - repo: local
+    hooks:
+      - id: swiftlint
+        name: SwiftLint
+        description: Lint staged Swift files with SwiftLint.
+        entry: swiftlint lint
+        language: system
+        files: \.swift$
+        exclude: ^\.build/

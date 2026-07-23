@@ -3,7 +3,7 @@ import SwiftBuild
 
 private final class NopDelegate: SWBPlanningOperationDelegate, @unchecked Sendable {
     func provisioningTaskInputs(targetGUID: String, provisioningSourceData: SWBProvisioningTaskInputsSourceData) async -> SWBProvisioningTaskInputs { .init() }
-    func executeExternalTool(commandLine: [String], workingDirectory: String?, environment: [String : String]) async throws -> SWBExternalToolResult {
+    func executeExternalTool(commandLine: [String], workingDirectory: String?, environment: [String: String]) async throws -> SWBExternalToolResult {
         print("  executeExternalTool: \(commandLine.first ?? "?") (returning .deferred)")
         return .deferred
     }

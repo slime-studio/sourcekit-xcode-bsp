@@ -70,7 +70,7 @@ struct WorkspaceChangeFilterTests {
     func rejectsOtherProjects() {
         let filter = WorkspaceChangeFilter(
             allowedPaths: [
-                "/Projects/App/App.xcodeproj/project.pbxproj",
+                "/Projects/App/App.xcodeproj/project.pbxproj"
             ]
         )
 
@@ -110,7 +110,7 @@ struct WorkspaceChangeFilterTests {
         // Even if a checkout path were mistakenly allowlisted, ignore components win.
         let filter = WorkspaceChangeFilter(
             allowedPaths: [
-                "/Projects/App/SourcePackages/checkouts/Dep/Package.swift",
+                "/Projects/App/SourcePackages/checkouts/Dep/Package.swift"
             ]
         )
         #expect(
@@ -126,7 +126,7 @@ struct WorkspaceChangeFilterTests {
         // be an ignore component or reloads never fire.
         let filter = WorkspaceChangeFilter(
             allowedPaths: [
-                "/Users/me/checkouts/MyApp/MyApp.xcodeproj/project.pbxproj",
+                "/Users/me/checkouts/MyApp/MyApp.xcodeproj/project.pbxproj"
             ]
         )
         #expect(

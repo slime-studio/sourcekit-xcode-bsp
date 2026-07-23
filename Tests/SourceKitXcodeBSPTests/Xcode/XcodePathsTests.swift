@@ -83,7 +83,7 @@ struct XcodePathsTests {
             .infoPlistInvalid,
             .versionNotFound,
             .unsupportedVersion(XcodeVersion(major: 15, minor: 0)),
-            .swbBuildServiceNotFound
+            .swbBuildServiceNotFound,
         ]
 
         for error in errors {
