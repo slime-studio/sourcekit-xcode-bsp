@@ -58,7 +58,7 @@ struct WorkspaceChangeFilterTests {
             allowedPaths: [
                 "/Projects/App/App.xcodeproj/project.pbxproj",
                 "/Projects/App/Package.swift",
-                "/Projects/App/Package.resolved"
+                "/Projects/App/Package.resolved",
             ]
         )
 
@@ -83,7 +83,7 @@ struct WorkspaceChangeFilterTests {
         let filter = WorkspaceChangeFilter(
             allowedPaths: [
                 "/Projects/App/App.xcodeproj/project.pbxproj",
-                "/Projects/App/Package.swift"
+                "/Projects/App/Package.swift",
             ]
         )
 
@@ -96,7 +96,7 @@ struct WorkspaceChangeFilterTests {
             "/Projects/App/SourcePackages/checkouts/Foo/Package.swift",
             "/Projects/App/SourcePackages/checkouts/Foo/Foo.xcodeproj/project.pbxproj",
             "/Projects/App/.swiftpm/configuration/registries.json",
-            "/Projects/App/App.xcodeproj/xcuserdata/user.xcuserdatad/xcschemes/xcschememanagement.plist"
+            "/Projects/App/App.xcodeproj/xcuserdata/user.xcuserdatad/xcschemes/xcschememanagement.plist",
         ]
 
         for path in noise {
@@ -228,7 +228,7 @@ struct WatcherContextDebounceTests {
         context.handle(paths: [
             "/Projects/App/.git/HEAD",
             "/Projects/App/.build/debug/output",
-            "/Projects/App/SourcePackages/checkouts/Dep/Package.swift"
+            "/Projects/App/SourcePackages/checkouts/Dep/Package.swift",
         ])
 
         try await Task.sleep(for: .milliseconds(120))

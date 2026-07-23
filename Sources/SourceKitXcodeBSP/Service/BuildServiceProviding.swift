@@ -105,7 +105,7 @@ public struct BuildServiceProviderFactory: Sendable {
                 // Always set explicitly so our config wins over any inherited environment value.
                 value: synchronousBuildDescriptionSerialization ? "YES" : "NO",
                 overwrite: true
-            )
+            ),
         ]
         if let serviceBundlePath {
             // An explicit path from the config is authoritative — overwrite any inherited value.

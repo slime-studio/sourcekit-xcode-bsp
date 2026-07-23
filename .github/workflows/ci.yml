@@ -23,11 +23,20 @@ jobs:
           # version here if `latest-stable` ever resolves below that floor.
           xcode-version: latest-stable
 
-      - name: Cache SwiftPM dependencies
+      - name: Cache SwiftPM dependency sources
         uses: actions/cache@v4
         with:
-          path: .build
-          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+          # Package.resolved isn't committed (swift-build/swift-tools-protocols float
+          # on `branch: main`), so it always hashes to the same empty match — key off
+          # Package.swift instead. Cache only fetched sources, not .build's compiled
+          # objects, so a stale cache can't silently serve outdated build products
+          # across dependency or toolchain changes; sources just get an incremental
+          # `git fetch` instead of a full clone.
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            .build/checkouts
+            .build/repositories
+          key: ${{ runner.os }}-spm-${{ hashFiles('Package.swift') }}
           restore-keys: |
             ${{ runner.os }}-spm-
 
@@ -43,7 +52,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install SwiftLint
-        run: brew install swiftlint
+        env:
+          SWIFTLINT_VERSION: "0.63.3" # keep in sync with the version contributors install locally
+        run: |
+          curl -sL "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/portable_swiftlint.zip" -o swiftlint.zip
+          unzip -q swiftlint.zip -d "$RUNNER_TEMP/swiftlint-bin"
+          chmod +x "$RUNNER_TEMP/swiftlint-bin/swiftlint"
+          echo "$RUNNER_TEMP/swiftlint-bin" >> "$GITHUB_PATH"
 
       - name: Lint
         run: swiftlint lint

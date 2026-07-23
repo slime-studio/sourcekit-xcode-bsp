@@ -19,7 +19,7 @@ public struct WorkspaceChangeFilter: Sendable {
         "xcuserdata",
         "Index.noindex",
         "ModuleCache.noindex",
-        "CompilationCache.noindex"
+        "CompilationCache.noindex",
     ]
 
     public init(allowedPaths: Set<String>) {
@@ -90,7 +90,7 @@ public struct WorkspaceChangeFilter: Sendable {
                 .appendingPathComponent("project.xcworkspace")
                 .appendingPathComponent("xcshareddata")
                 .appendingPathComponent("swiftpm")
-                .appendingPathComponent("Package.resolved").path
+                .appendingPathComponent("Package.resolved").path,
         ]
     }
 
@@ -101,7 +101,7 @@ public struct WorkspaceChangeFilter: Sendable {
             workspaceURL
                 .appendingPathComponent("xcshareddata")
                 .appendingPathComponent("swiftpm")
-                .appendingPathComponent("Package.resolved").path
+                .appendingPathComponent("Package.resolved").path,
         ]
     }
 
