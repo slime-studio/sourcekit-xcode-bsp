@@ -213,6 +213,11 @@ struct WatcherContextDebounceTests {
         for await _ in changeStream {
             break
         }
+        // A slow runner can only delay a fire, never manufacture a spurious extra
+        // one, so this quiet window is safe against the same CI race: it only
+        // catches a real regression (coalescing broken, onChange fires more than
+        // once), it can't itself flake count down to 0.
+        try await Task.sleep(for: .milliseconds(150))
         changeContinuation.finish()
         #expect(count.withLock { $0 } == 1)
         context.cancelPending()
