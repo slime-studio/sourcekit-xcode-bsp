@@ -187,17 +187,19 @@ struct WorkspaceChangeFilterTests {
 @Suite("WatcherContext debounce")
 struct WatcherContextDebounceTests {
 
-    @Test("Coalesces rapid relevant events into a single onChange")
+    @Test("Coalesces rapid relevant events into a single onChange", .timeLimit(.minutes(1)))
     func coalescesBursts() async throws {
         let filter = WorkspaceChangeFilter(
             allowedPaths: ["/Projects/App/App.xcodeproj/project.pbxproj"]
         )
         let count = OSAllocatedUnfairLock(initialState: 0)
+        let (changeStream, changeContinuation) = AsyncStream.makeStream(of: Void.self)
         let context = WatcherContext(
             filter: filter,
             debounceInterval: 0.05,
             onChange: {
                 count.withLock { $0 += 1 }
+                changeContinuation.yield(())
             }
         )
 
@@ -206,7 +208,17 @@ struct WatcherContextDebounceTests {
         context.handle(paths: ["/Projects/App/.git/HEAD"])
         context.handle(paths: ["/Projects/App/App.xcodeproj/project.pbxproj"])
 
-        try await Task.sleep(for: .milliseconds(120))
+        // Wait for the debounced onChange to actually fire instead of racing a fixed
+        // sleep against CI scheduling jitter, which flaked in CI (count == 0).
+        for await _ in changeStream {
+            break
+        }
+        // A slow runner can only delay a fire, never manufacture a spurious extra
+        // one, so this quiet window is safe against the same CI race: it only
+        // catches a real regression (coalescing broken, onChange fires more than
+        // once), it can't itself flake count down to 0.
+        try await Task.sleep(for: .milliseconds(150))
+        changeContinuation.finish()
         #expect(count.withLock { $0 } == 1)
         context.cancelPending()
     }
