@@ -18,7 +18,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/swiftlang/swift-build.git", branch: "main"),
+        .package(url: "https://github.com/swiftlang/swift-build.git", revision: "7f96ee0e8aa8a35fe84f3e80932eb9e456356d10"),
         .package(url: "https://github.com/swiftlang/swift-tools-protocols.git", branch: "main"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
     ],
