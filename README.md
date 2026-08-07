@@ -30,14 +30,14 @@ You still need Xcode installed for Apple platform SDKs and build tooling, even w
 **Homebrew** (recommended):
 
 ```bash
-brew tap tideline-studio/tap
+brew tap slime-studio/tap
 brew install sourcekit-xcode-bsp
 ```
 
 **Build from source** (requires Swift 6.2+):
 
 ```bash
-git clone https://github.com/tideline-studio/sourcekit-xcode-bsp.git
+git clone https://github.com/slime-studio/sourcekit-xcode-bsp.git
 cd sourcekit-xcode-bsp
 swift build -c release
 cp .build/release/sourcekit-xcode-bsp /usr/local/bin/

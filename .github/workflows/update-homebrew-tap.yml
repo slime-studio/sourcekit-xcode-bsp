@@ -18,7 +18,7 @@ jobs:
       - name: Checkout tap
         uses: actions/checkout@v4
         with:
-          repository: tideline-studio/homebrew-tap
+          repository: slime-studio/homebrew-tap
           token: ${{ secrets.TAP_GITHUB_TOKEN }}
 
       - name: Update formula
@@ -40,9 +40,9 @@ jobs:
           git checkout -b "$branch"
           git add Formula/sourcekit-xcode-bsp.rb
           git commit -m "Update sourcekit-xcode-bsp to ${version}"
-          git push "https://x-access-token:${GH_TOKEN}@github.com/tideline-studio/homebrew-tap.git" "$branch"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/slime-studio/homebrew-tap.git" "$branch"
           gh pr create \
-            --repo tideline-studio/homebrew-tap \
+            --repo slime-studio/homebrew-tap \
             --title "Update sourcekit-xcode-bsp to ${version}" \
             --body "Automated formula update for version \`${version}\`.
 
