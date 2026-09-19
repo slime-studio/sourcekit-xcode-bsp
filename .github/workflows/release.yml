@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '[0-9]*.[0-9]*.[0-9]*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    outputs:
+      asset-url: ${{ steps.package.outputs.asset-url }}
+      sha256: ${{ steps.package.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          # This project requires Xcode 26+ (see README Requirements). Pin an exact
+          # version here if `latest-stable` ever resolves below that floor.
+          xcode-version: latest-stable
+
+      - name: Build universal release binary
+        run: swift build --configuration release --arch arm64 --arch x86_64 --disable-sandbox
+
+      - name: Package
+        id: package
+        run: |
+          set -euo pipefail
+          version="${{ github.ref_name }}"
+          name="sourcekit-xcode-bsp-${version}-macos.tar.gz"
+          products=".build/apple/Products/Release"
+          staging="$RUNNER_TEMP/stage"
+
+          mkdir -p "$staging"
+          cp "$products/sourcekit-xcode-bsp" "$products/SWBBuildServiceBundle" "$staging/"
+          # swift-build ships one resource bundle per supported platform; glob rather than
+          # hardcode names so a swift-build revision bump can't silently drop one.
+          cp -R "$products"/*.bundle "$staging/"
+          tar -czf "$name" -C "$staging" .
+
+          # Extract to a directory other than $staging to prove the tarball is relocatable,
+          # not just runnable in place.
+          verify="$RUNNER_TEMP/verify"
+          mkdir -p "$verify"
+          tar -xzf "$name" -C "$verify"
+          "$verify/sourcekit-xcode-bsp" --help
+
+          sha=$(shasum -a 256 "$name" | awk '{print $1}')
+          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
+          echo "asset-url=https://github.com/${{ github.repository }}/releases/download/${version}/${name}" >> "$GITHUB_OUTPUT"
+          echo "ASSET_PATH=$name" >> "$GITHUB_ENV"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" "$ASSET_PATH" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes
+
+  update-tap:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tap
+        uses: actions/checkout@v4
+        with:
+          repository: slime-studio/homebrew-tap
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+
+      - name: Update formula
+        run: |
+          set -euo pipefail
+          version="${{ github.ref_name }}"
+          asset_url="${{ needs.build.outputs.asset-url }}"
+          sha="${{ needs.build.outputs.sha256 }}"
+          # `0,/pattern/s` limits the substitution to the first match, so the `head do`
+          # block's source url/sha256 (if the formula has one) is left untouched.
+          sed -i "0,/^  url \".*\"\$/s|^  url \".*\"\$|  url \"${asset_url}\"|" Formula/sourcekit-xcode-bsp.rb
+          sed -i "0,/^  sha256 \".*\"\$/s|^  sha256 \".*\"\$|  sha256 \"${sha}\"|" Formula/sourcekit-xcode-bsp.rb
+
+      - name: Open PR
+        env:
+          GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          version="${{ github.ref_name }}"
+          branch="update/sourcekit-xcode-bsp-${version}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global credential.helper ""
+          git checkout -b "$branch"
+          git add Formula/sourcekit-xcode-bsp.rb
+          git commit -m "Update sourcekit-xcode-bsp to ${version}"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/slime-studio/homebrew-tap.git" "$branch"
+          gh pr create \
+            --repo slime-studio/homebrew-tap \
+            --title "Update sourcekit-xcode-bsp to ${version}" \
+            --body "Automated formula update for version \`${version}\`.
+
+          - Prebuilt asset: \`${{ needs.build.outputs.asset-url }}\`
+          - SHA-256: \`${{ needs.build.outputs.sha256 }}\`" \
+            --base main \
+            --head "$branch"
