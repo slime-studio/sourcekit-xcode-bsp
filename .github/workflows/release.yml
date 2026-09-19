@@ -25,7 +25,15 @@ jobs:
           xcode-version: latest-stable
 
       - name: Build universal release binary
-        run: swift build --configuration release --arch arm64 --arch x86_64 --disable-sandbox
+        id: build
+        run: |
+          set -euo pipefail
+          flags=(--configuration release --arch arm64 --arch x86_64)
+          swift build "${flags[@]}" --disable-sandbox
+          # Ask SwiftPM for the product directory instead of hardcoding
+          # .build/apple/Products/Release, which is an implementation detail that has
+          # moved across toolchain versions before.
+          echo "products=$(swift build "${flags[@]}" --show-bin-path)" >> "$GITHUB_OUTPUT"
 
       - name: Package
         id: package
@@ -33,7 +41,7 @@ jobs:
           set -euo pipefail
           version="${{ github.ref_name }}"
           name="sourcekit-xcode-bsp-${version}-macos.tar.gz"
-          products=".build/apple/Products/Release"
+          products="${{ steps.build.outputs.products }}"
           staging="$RUNNER_TEMP/stage"
 
           mkdir -p "$staging"
@@ -48,7 +56,20 @@ jobs:
           verify="$RUNNER_TEMP/verify"
           mkdir -p "$verify"
           tar -xzf "$name" -C "$verify"
-          "$verify/sourcekit-xcode-bsp" --help
+
+          # --help returns before Serve.run(), so it never exercises the co-located
+          # SWBBuildServiceBundle lookup and wouldn't catch a single-arch artifact.
+          # Check architectures directly instead.
+          for bin in sourcekit-xcode-bsp SWBBuildServiceBundle; do
+            archs="$(lipo -info "$verify/$bin" | awk -F': ' '{print $NF}')"
+            for arch in arm64 x86_64; do
+              if [[ "$archs" != *"$arch"* ]]; then
+                echo "::error::$bin is missing $arch (found: $archs)"
+                exit 1
+              fi
+            done
+          done
+          "$verify/sourcekit-xcode-bsp" --help >/dev/null
 
           sha=$(shasum -a 256 "$name" | awk '{print $1}')
           echo "sha256=$sha" >> "$GITHUB_OUTPUT"
@@ -59,9 +80,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" "$ASSET_PATH" \
-            --title "${{ github.ref_name }}" \
-            --generate-notes
+          set -euo pipefail
+          tag="${{ github.ref_name }}"
+          # Tolerate a rerun after update-tap failed on a prior attempt: the release
+          # already exists, so upload to it instead of erroring out of gh release create.
+          if gh release view "$tag" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$tag" "$ASSET_PATH" --clobber
+          else
+            gh release create "$tag" "$ASSET_PATH" --title "$tag" --generate-notes
+          fi
 
   update-tap:
     needs: build
