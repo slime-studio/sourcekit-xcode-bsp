@@ -15,9 +15,49 @@ public actor ProcessRunner {
         case launchFailed(underlying: any Error)
         /// The process launched and ran to completion but exited with a non-zero status.
         case nonZeroExit(terminationStatus: Int32, output: Output)
+        /// A pipe could not be read to completion. Surfaced rather than swallowed: returning the
+        /// partial output would hand the caller silently truncated data, which is far harder to
+        /// diagnose than a failure.
+        case outputReadFailed(underlying: any Error)
     }
 
     public init() {}
+
+    /// Size of each read. Large enough that a typical payload needs only a handful of reads,
+    /// small enough not to over-allocate for the common tiny output.
+    private static let readChunkSize = 64 * 1024
+
+    /// Reads `handle` to EOF in chunks, reporting a read failure instead of truncating.
+    ///
+    /// Two deliberate API choices:
+    ///
+    /// - Not `FileHandle.bytes`: that async sequence suspends once per *byte*, so a payload the
+    ///   size of an `xcodebuild -showBuildSettings -json` dump (~90KB) took minutes rather than
+    ///   milliseconds.
+    /// - Not `availableData`: it signals read errors by raising an Objective-C
+    ///   `NSFileHandleOperationException`, which Swift cannot catch — a read error would crash
+    ///   the process instead of surfacing. `read(upToCount:)` throws a Swift error for the same
+    ///   conditions and returns `nil` at end of file.
+    ///
+    /// Both block until data arrives, so this runs on a global queue to keep blocking off the
+    /// cooperative thread pool.
+    static func drain(_ handle: FileHandle) async -> Result<Data, any Error> {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Result<Data, any Error>, Never>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                var data = Data()
+                do {
+                    // nil means EOF; an empty chunk is treated the same, since the documented
+                    // end-of-file signal has varied between `nil` and empty `Data`.
+                    while let chunk = try handle.read(upToCount: readChunkSize), !chunk.isEmpty {
+                        data.append(chunk)
+                    }
+                    continuation.resume(returning: .success(data))
+                } catch {
+                    continuation.resume(returning: .failure(error))
+                }
+            }
+        }
+    }
 
     public func run(executableURL: URL, arguments: [String]) async throws -> Output {
         let process = Process()
@@ -32,24 +72,8 @@ public actor ProcessRunner {
         // Drain both pipes concurrently with the process running, rather than after
         // it exits, so output larger than the pipe buffer can't deadlock the process
         // (it would block writing to a full pipe that nothing is reading yet).
-        let stdoutTask = Task {
-            var stdoutBuffer: [UInt8] = []
-            do {
-                for try await byte in stdoutPipe.fileHandleForReading.bytes {
-                    stdoutBuffer.append(byte)
-                }
-            } catch {}
-            return Data(stdoutBuffer)
-        }
-        let stderrTask = Task {
-            var stderrBuffer: [UInt8] = []
-            do {
-                for try await byte in stderrPipe.fileHandleForReading.bytes {
-                    stderrBuffer.append(byte)
-                }
-            } catch {}
-            return Data(stderrBuffer)
-        }
+        let stdoutTask = Task { await Self.drain(stdoutPipe.fileHandleForReading) }
+        let stderrTask = Task { await Self.drain(stderrPipe.fileHandleForReading) }
 
         do {
             // SWBUtil's run(interruptible:) suspends until the process actually
@@ -61,7 +85,14 @@ public actor ProcessRunner {
             throw RunError.launchFailed(underlying: error)
         }
 
-        let output = await Output(stdout: stdoutTask.value, stderr: stderrTask.value)
+        let stdoutResult = await stdoutTask.value
+        let stderrResult = await stderrTask.value
+        let output: Output
+        do {
+            output = Output(stdout: try stdoutResult.get(), stderr: try stderrResult.get())
+        } catch {
+            throw RunError.outputReadFailed(underlying: error)
+        }
 
         guard process.terminationStatus == 0 else {
             throw RunError.nonZeroExit(terminationStatus: process.terminationStatus, output: output)

@@ -120,16 +120,43 @@ public struct BuildServerBootstrap: Sendable {
 
     private func makeBuildRequest(buildRoot: String, platform: String?) -> SWBBuildRequest {
         var buildRequest = SWBBuildRequest()
+        // Mirrors Xcode's own DerivedData layout. Critically, we WRITE into the index arena
+        // (Index.noindex/Build/...) and only REFERENCE the regular one (Build/...), exactly as
+        // Xcode's own background indexer does.
+        //
+        // That separation is load-bearing, not cosmetic: SYMROOT/OBJROOT are taken straight from
+        // `buildProductsPath`/`buildIntermediatesPath` (see SWBCore's
+        // Settings.getWorkspacePathOverrides), and each arena carries its own llbuild database at
+        // <intermediates>/XCBuildData/build.db. Pointing both slots at Build/... would make our
+        // build-description generation share that database with the user's own ⌘B builds.
+        // `indexRegularBuild*Path` exists precisely so an index build can reference regular build
+        // products without writing into their arena.
+        //
+        // Note: SWBBuildServer forces action=indexbuild on the request derived from this, and
+        // index builds set SWIFT_INDEX_STORE_ENABLE=false — so this does not populate Xcode's
+        // index store. What is genuinely shared is DERIVED_DATA_DIR (hence the module cache and
+        // SDK_EXPLICIT_MODULES_OUTPUT_PATH) plus the referenced regular build products.
+        let regularBuildPath = (buildRoot as NSString).appendingPathComponent("Build")
+        let regularProductsPath = (regularBuildPath as NSString).appendingPathComponent("Products")
+        let regularIntermediatesPath = (regularBuildPath as NSString)
+            .appendingPathComponent("Intermediates.noindex")
+
+        let indexPath = (buildRoot as NSString).appendingPathComponent("Index.noindex")
+        let indexBuildPath = (indexPath as NSString).appendingPathComponent("Build")
+        let indexProductsPath = (indexBuildPath as NSString).appendingPathComponent("Products")
+        let indexIntermediatesPath = (indexBuildPath as NSString)
+            .appendingPathComponent("Intermediates.noindex")
+
         // INDEX_ENABLE_DATA_STORE is always on; not exposed as config (unclear BSP semantics).
         buildRequest.parameters.arenaInfo = SWBArenaInfo(
             derivedDataPath: buildRoot,
-            buildProductsPath: (buildRoot as NSString).appendingPathComponent("Products"),
-            buildIntermediatesPath: (buildRoot as NSString).appendingPathComponent("Intermediates.noindex"),
-            pchPath: buildRoot,
-            indexRegularBuildProductsPath: buildRoot,
-            indexRegularBuildIntermediatesPath: buildRoot,
-            indexPCHPath: buildRoot,
-            indexDataStoreFolderPath: buildRoot,
+            buildProductsPath: indexProductsPath,
+            buildIntermediatesPath: indexIntermediatesPath,
+            pchPath: (indexIntermediatesPath as NSString).appendingPathComponent("PrecompiledHeaders"),
+            indexRegularBuildProductsPath: regularProductsPath,
+            indexRegularBuildIntermediatesPath: regularIntermediatesPath,
+            indexPCHPath: (indexPath as NSString).appendingPathComponent("PrecompiledHeaders"),
+            indexDataStoreFolderPath: (indexPath as NSString).appendingPathComponent("DataStore"),
             indexEnableDataStore: true
         )
 

@@ -34,7 +34,9 @@ struct Serve: AsyncParsableCommand {
         let cwd = FileManager.default.currentDirectoryPath
         let config = try ConfigLoader.load(from: cwd)
         let workspacePath = try ConfigLoader.resolveWorkspacePath(config: config, relativeTo: cwd)
-        let buildRoot = ConfigLoader.resolveBuildRoot(config: config, relativeTo: cwd)
+        let buildRoot = await ConfigLoader.resolveBuildRoot(
+            config: config, relativeTo: cwd, workspacePath: workspacePath
+        )
 
         let serviceProvider = try await BuildServiceProviderFactory(
             serviceBundlePath: ConfigLoader.resolveServiceBundlePath(config: config, relativeTo: cwd),

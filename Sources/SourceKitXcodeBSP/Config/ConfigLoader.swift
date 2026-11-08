@@ -1,12 +1,16 @@
 import Foundation
 
+private let logger = StderrLogger(category: "build-root")
+
 /// Configuration loaded from buildServer.json.
 public struct BuildServerConfig: Sendable, Codable {
     /// Path to `.xcworkspace` or `.xcodeproj` (absolute or relative to buildServer.json).
     public let workspace: String
 
     /// Optional path to build root (Xcode's DerivedData directory for this workspace).
-    /// If not specified, uses `.build/derived-data` in the workspace directory.
+    /// If not specified, the server tries to resolve Xcode's own DerivedData root for the
+    /// workspace (see `XcodeDerivedDataResolver`); if that isn't resolvable, it falls back
+    /// to `.build/derived-data` in the workspace directory.
     public let buildRoot: String?
 
     /// Target platform for builds (optional).
@@ -100,15 +104,65 @@ public enum ConfigLoader {
 
     /// Resolves the build root path from configuration.
     ///
+    /// An explicit `buildRoot` in `buildServer.json` is always authoritative. Otherwise, when
+    /// `workspacePath` is given, this tries to resolve Xcode's own DerivedData root for that
+    /// workspace (via `xcodeDerivedDataResolver`) so build artifacts, module cache, and index
+    /// data are shared with Xcode itself rather than duplicated. That resolution is best-effort
+    /// (it shells out to `xcodebuild`, which needs a scheme and can fail or time out) — on any
+    /// failure, or when `workspacePath` is omitted, this falls back to `.build/derived-data`
+    /// inside `directory`.
+    ///
     /// - Parameters:
     ///   - config: The loaded configuration.
     ///   - directory: Directory to resolve relative paths against.
+    ///   - workspacePath: Absolute path to the `.xcodeproj`/`.xcworkspace`, used only to probe
+    ///     for Xcode's own DerivedData root when `config.buildRoot` is unset.
+    ///   - xcodeDerivedDataResolver: Resolver for Xcode's own DerivedData root; injectable for
+    ///     testing.
     /// - Returns: Absolute path to build root directory.
     public static func resolveBuildRoot(
         config: BuildServerConfig,
-        relativeTo directory: String
+        relativeTo directory: String,
+        workspacePath: String? = nil,
+        xcodeDerivedDataResolver: XcodeDerivedDataResolver = XcodeDerivedDataResolver()
+    ) async -> String {
+        var xcodeDerivedDataRoot: String?
+        if config.buildRoot == nil, let workspacePath {
+            xcodeDerivedDataRoot = await xcodeDerivedDataResolver.resolve(workspacePath: workspacePath)
+        }
+        let resolved = buildRoot(
+            configuredPath: config.buildRoot,
+            directory: directory,
+            xcodeDerivedDataRoot: xcodeDerivedDataRoot
+        )
+        // Log which of the three sources won. A silent fallback previously made a completely
+        // broken DerivedData resolution indistinguishable from a working one.
+        if config.buildRoot != nil {
+            logger.info("Build root from buildServer.json: \(resolved)")
+        } else if xcodeDerivedDataRoot != nil {
+            logger.info("Build root from Xcode's own DerivedData: \(resolved)")
+        } else {
+            logger.info("Build root fallback, NOT shared with Xcode: \(resolved)")
+        }
+        return resolved
+    }
+
+    /// Picks the final build root given an already-resolved (or absent) Xcode DerivedData
+    /// root. Pure and independent of `XcodeDerivedDataResolver`/`xcodebuild`, so it can be
+    /// tested directly without launching a real subprocess.
+    ///
+    /// - Parameters:
+    ///   - configuredPath: `config.buildRoot` from `buildServer.json`; authoritative when present.
+    ///   - directory: Directory to resolve relative `configuredPath` values against.
+    ///   - xcodeDerivedDataRoot: Xcode's own DerivedData root for the workspace, already
+    ///     resolved by the caller; used when `configuredPath` is absent.
+    static func buildRoot(
+        configuredPath: String?,
+        directory: String,
+        xcodeDerivedDataRoot: String?
     ) -> String {
-        guard let configuredPath = config.buildRoot else {
+        guard let configuredPath else {
+            if let xcodeDerivedDataRoot { return xcodeDerivedDataRoot }
             // Default to .build/derived-data in workspace directory
             return (directory as NSString).appendingPathComponent(".build/derived-data")
         }
@@ -131,7 +185,8 @@ public enum ConfigLoader {
     ///   - argv: Command the LSP client runs to launch the server (the sourcekit-xcode-bsp binary path).
     ///   - workspace: Path to `.xcodeproj`/`.xcworkspace` (absolute or relative to the file).
     ///   - platform: Optional run-destination platform (e.g. `iphonesimulator`).
-    ///   - buildRoot: Optional build root; when nil the server defaults to `.build/derived-data`.
+    ///   - buildRoot: Optional build root; when nil the server tries Xcode's own DerivedData
+    ///     root for the workspace, falling back to `.build/derived-data` if that fails.
     ///   - synchronousBuildDescriptionSerialization: Optional toggle to write build descriptions
     ///     before SourceKit-LSP receives their target-change notification.
     public static func renderConfig(
