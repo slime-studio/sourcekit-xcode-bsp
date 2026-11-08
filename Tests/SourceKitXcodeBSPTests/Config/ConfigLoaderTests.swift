@@ -112,3 +112,51 @@ struct RenderConfigTests {
         #expect(config.workspace == "A.xcodeproj")
     }
 }
+
+@Suite("ConfigLoader.buildRoot")
+struct BuildRootTests {
+
+    @Test("An explicit absolute configuredPath is used as-is")
+    func explicitAbsolutePath() {
+        let result = ConfigLoader.buildRoot(
+            configuredPath: "/explicit/root",
+            directory: "/workspace",
+            xcodeDerivedDataRoot: "/xcode/derived-data/App-abc123"
+        )
+
+        #expect(result == "/explicit/root")
+    }
+
+    @Test("An explicit relative configuredPath wins over the Xcode DerivedData root")
+    func explicitPathWinsOverXcodeRoot() {
+        let result = ConfigLoader.buildRoot(
+            configuredPath: "build",
+            directory: "/workspace",
+            xcodeDerivedDataRoot: "/xcode/derived-data/App-abc123"
+        )
+
+        #expect(result == "/workspace/build")
+    }
+
+    @Test("Uses the resolved Xcode DerivedData root when no explicit configuredPath is set")
+    func usesXcodeRootWhenNoExplicitPath() {
+        let result = ConfigLoader.buildRoot(
+            configuredPath: nil,
+            directory: "/workspace",
+            xcodeDerivedDataRoot: "/xcode/derived-data/App-abc123"
+        )
+
+        #expect(result == "/xcode/derived-data/App-abc123")
+    }
+
+    @Test("Falls back to .build/derived-data when neither an explicit path nor an Xcode root is available")
+    func fallsBackToDefault() {
+        let result = ConfigLoader.buildRoot(
+            configuredPath: nil,
+            directory: "/workspace",
+            xcodeDerivedDataRoot: nil
+        )
+
+        #expect(result == "/workspace/.build/derived-data")
+    }
+}

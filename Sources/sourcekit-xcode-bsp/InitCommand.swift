@@ -33,7 +33,10 @@ struct InitCommand: ParsableCommand {
             "Platform (iphonesimulator, macosx, …; empty = let SwiftBuild choose)",
             default: "iphonesimulator"
         )
-        let buildRoot = ask("Build root", default: ".build/derived-data")
+        let buildRoot = ask(
+            "Build root (empty = try Xcode's own DerivedData, else .build/derived-data)",
+            default: ""
+        )
         let syncSerialization = askYesNo(
             "Avoid empty diagnostics on startup? (writes build description before notifying SourceKit-LSP)",
             default: true
