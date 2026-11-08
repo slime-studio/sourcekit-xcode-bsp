@@ -3,13 +3,13 @@ import Foundation
 import SourceKitXcodeBSP
 
 /// Interactively generates a `buildServer.json` in the current directory.
-struct InitCommand: ParsableCommand {
+struct InitCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "init",
         abstract: "Interactively generate a buildServer.json in the current directory."
     )
 
-    func run() throws {
+    func run() async throws {
         let cwd = FileManager.default.currentDirectoryPath
         let outPath = (cwd as NSString).appendingPathComponent("buildServer.json")
 
@@ -33,9 +33,23 @@ struct InitCommand: ParsableCommand {
             "Platform (iphonesimulator, macosx, …; empty = let SwiftBuild choose)",
             default: "iphonesimulator"
         )
+        // Resolved once, now, and baked into the file — not re-resolved on every `serve`
+        // launch. If Xcode's DerivedData location ever changes (a different selected Xcode,
+        // a custom Derived Data preference, or the project moving), re-run `init` to refresh
+        // this value; buildServer.json's other fields (workspace, platform) already work the
+        // same way, so this isn't a new way of using the file.
+        say("Resolving Xcode's DerivedData location…")
+        let resolvedWorkspacePath = workspace.hasPrefix("/")
+            ? workspace
+            : ((cwd as NSString).appendingPathComponent(workspace) as NSString).standardizingPath
+        let resolvedDerivedData = await XcodeDerivedDataResolver().resolve(
+            workspacePath: resolvedWorkspacePath
+        )
         let buildRoot = ask(
-            "Build root (empty = try Xcode's own DerivedData, else .build/derived-data)",
-            default: ""
+            resolvedDerivedData != nil
+                ? "Build root (resolved from Xcode's own DerivedData)"
+                : "Build root (couldn't resolve Xcode's DerivedData; using a project-local fallback)",
+            default: resolvedDerivedData ?? ".build/derived-data"
         )
         let syncSerialization = askYesNo(
             "Avoid empty diagnostics on startup? (writes build description before notifying SourceKit-LSP)",
