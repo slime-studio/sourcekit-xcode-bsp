@@ -52,9 +52,15 @@ public protocol BuildServiceSessionProviding: Sendable {
 /// out-of-process `SWBBuildService` launches, so all env setup must happen here,
 /// before `make()` calls `SWBBuildService(connectionMode: .outOfProcess)`.
 public struct BuildServiceProviderFactory: Sendable {
+    /// Xcode 27 shipped the first Xcode-bundled SWBBuildService verified compatible
+    /// (end-to-end session + real build) with the swift-build revision this project pins.
+    /// Below this version the co-located, pinned bundle remains the safer default.
+    static let minimumXcodeVersionForBundledService = 27
+
     public let serviceBundlePath: String?
     public let synchronousBuildDescriptionSerialization: Bool
     private let environment: any EnvironmentRepository
+    private let xcodePaths: XcodePathsService
 
     public init(
         serviceBundlePath: String? = nil,
@@ -64,10 +70,11 @@ public struct BuildServiceProviderFactory: Sendable {
         self.serviceBundlePath = serviceBundlePath
         self.synchronousBuildDescriptionSerialization = synchronousBuildDescriptionSerialization
         self.environment = environment
+        xcodePaths = XcodePathsService(environment: environment)
     }
 
     public func make() async throws -> any BuildServiceProviding {
-        configureEnvironment()
+        await configureEnvironment()
         let service = try await SWBBuildService(connectionMode: .outOfProcess, serviceBundleURL: nil)
         return RealBuildServiceProvider(service: service)
     }
@@ -83,8 +90,15 @@ public struct BuildServiceProviderFactory: Sendable {
     ///
     /// SwiftBuild only accepts a path to a flat (non-`.bundle`) service executable via the
     /// `SWBBUILDSERVICE_PATH` environment variable, so that is how the resolved path is
-    /// handed to the framework. We prefer the service built from the same swift-build
-    /// checkout over the (older) one the framework's Xcode.app PlugIns lookup would find.
+    /// handed to the framework.
+    ///
+    /// Preference order: an explicit `serviceBundlePath` from `buildServer.json` is always
+    /// authoritative. Otherwise, on Xcode `minimumXcodeVersionForBundledService`+ we prefer
+    /// Xcode's own bundled SWBBuildService over the pinned one co-located alongside this
+    /// executable — Apple's build stays current with the installed toolchain/SDKs without
+    /// us re-vendoring swift-build on every Xcode release. Below that version (or when Xcode's
+    /// service can't be found) we fall back to the co-located pinned bundle, which is the one
+    /// actually verified against the swift-build revision this project builds against.
     ///
     /// Pure and independent of `EnvironmentRepository`/`SWBBuildService`, so it can be
     /// tested directly without a fake environment or launching a real out-of-process service.
@@ -92,11 +106,14 @@ public struct BuildServiceProviderFactory: Sendable {
     /// - Parameters:
     ///   - serviceBundlePath: Explicit service executable path from `buildServer.json`
     ///     (`serviceBundlePath`). Authoritative when present.
+    ///   - xcodeBundledServiceBundlePath: Xcode's own SWBBuildService executable, already
+    ///     gated to `nil` unless the detected Xcode is `minimumXcodeVersionForBundledService`+.
     ///   - coLocatedServiceBundlePath: Path to the `SWBBuildServiceBundle` co-located next
-    ///     to this executable, if one exists there. Used as a fallback default.
+    ///     to this executable, if one exists there. Used as the final fallback default.
     static func environmentAssignments(
         serviceBundlePath: String?,
         synchronousBuildDescriptionSerialization: Bool,
+        xcodeBundledServiceBundlePath: String?,
         coLocatedServiceBundlePath: String?
     ) -> [EnvironmentAssignment] {
         var assignments = [
@@ -112,19 +129,28 @@ public struct BuildServiceProviderFactory: Sendable {
             assignments.append(
                 EnvironmentAssignment(key: "SWBBUILDSERVICE_PATH", value: serviceBundlePath, overwrite: true)
             )
-        } else if let coLocatedServiceBundlePath {
+        } else if let preferredPath = xcodeBundledServiceBundlePath ?? coLocatedServiceBundlePath {
             // overwrite: false so an explicit SWBBUILDSERVICE_PATH already in the
-            // environment still takes precedence over the co-located default.
+            // environment still takes precedence over either default.
             assignments.append(
-                EnvironmentAssignment(
-                    key: "SWBBUILDSERVICE_PATH", value: coLocatedServiceBundlePath, overwrite: false
-                )
+                EnvironmentAssignment(key: "SWBBUILDSERVICE_PATH", value: preferredPath, overwrite: false)
             )
         }
         return assignments
     }
 
-    private func configureEnvironment() {
+    /// Xcode's own SWBBuildService, when the detected Xcode is new enough to prefer it
+    /// over the pinned, co-located bundle. `nil` below `minimumXcodeVersionForBundledService`
+    /// or when Xcode's build service couldn't be located.
+    static func preferredXcodeBundledServiceBundlePath(
+        xcodeVersion: XcodeVersion,
+        xcodeServiceBundlePath: String?
+    ) -> String? {
+        guard xcodeVersion.major >= minimumXcodeVersionForBundledService else { return nil }
+        return xcodeServiceBundlePath
+    }
+
+    private func configureEnvironment() async {
         let coLocatedServiceBundlePath: String? = {
             guard let execURL = Bundle.main.executableURL else { return nil }
             let serviceURL = execURL.deletingLastPathComponent()
@@ -132,9 +158,20 @@ public struct BuildServiceProviderFactory: Sendable {
             return FileManager.default.isExecutableFile(atPath: serviceURL.path) ? serviceURL.path : nil
         }()
 
+        // Best-effort: if Xcode's version/path can't be resolved (e.g. xcode-select
+        // misconfigured), fall back to the co-located bundle rather than failing startup.
+        let resolvedXcodePaths = try? await xcodePaths.resolve()
+        let xcodeBundledServiceBundlePath = resolvedXcodePaths.flatMap {
+            Self.preferredXcodeBundledServiceBundlePath(
+                xcodeVersion: $0.version,
+                xcodeServiceBundlePath: $0.swbBuildService
+            )
+        }
+
         for assignment in Self.environmentAssignments(
             serviceBundlePath: serviceBundlePath,
             synchronousBuildDescriptionSerialization: synchronousBuildDescriptionSerialization,
+            xcodeBundledServiceBundlePath: xcodeBundledServiceBundlePath,
             coLocatedServiceBundlePath: coLocatedServiceBundlePath
         ) {
             environment.set(assignment.key, value: assignment.value, overwrite: assignment.overwrite)

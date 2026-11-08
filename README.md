@@ -74,7 +74,7 @@ sourcekit-lsp reads `buildServer.json` and launches this server over stdio. Bare
 | `workspace` | Yes | Path to `.xcodeproj` or `.xcworkspace`, relative to this file or absolute |
 | `buildRoot` | No | Build artifacts directory. Defaults to Xcode's own DerivedData root for the workspace, resolved by asking `xcodebuild` — so it follows Xcode's **Settings → Locations → Derived Data** setting, including a custom location. The module cache is then shared and Xcode's build products are reusable. Writes go to the `Index.noindex/Build` arena, never Xcode's regular build arena. Falls back to `.build/derived-data` (not shared) if the root can't be resolved; the server logs which source it used |
 | `platform` | No | Run destination, such as `iphonesimulator`, `iphoneos`, or `macosx`. `init` defaults to `iphonesimulator`. If omitted, swift-build chooses one |
-| `serviceBundlePath` | No | Path to `SWBBuildServiceBundle`. Defaults to the copy next to the binary |
+| `serviceBundlePath` | No | Path to `SWBBuildServiceBundle`. On Xcode 27+, defaults to the build service bundled inside the selected Xcode; otherwise defaults to the copy next to the binary |
 | `synchronousBuildDescriptionSerialization` | No | Write the build description before notifying SourceKit-LSP, so the first diagnostics are not empty. Defaults to `true` |
 
 ## Development
